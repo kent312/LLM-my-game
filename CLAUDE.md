@@ -10,9 +10,21 @@
 
 ## 作業開始時の手順
 
-1. `docs/実装仕様書.md` 冒頭の「実装状況」と §12 のマイルストーン表で現在地を確認
+実装は **PR 単位**で進める（実装仕様書 §12 が作業キュー。ブランチ名・成果物・受け入れ条件・テストがPRごとに定義済み）。
+
+1. `docs/実装仕様書.md` 冒頭の「実装状況」で次の PR を確認
 2. `git log --oneline -10` で直近の作業を確認
-3. マイルストーンを完了したら、実装仕様書の「実装状況」を更新してからコミット
+3. §12 の該当 PR の受け入れ条件・テストケースに従って実装（`pr/NN-名前` ブランチ）
+4. `bash tools/checks.sh` が exit 0 になったら、実装仕様書の「実装状況」を更新して PR 作成
+
+## コマンド（PR-00 完了後に有効）
+
+```bash
+bash tools/setup.sh          # Godot と GUT を取得（冪等）
+bash tools/checks.sh         # マージゲート: 全テスト＋依存規則チェック
+bash tools/check_deps.sh     # core→ai/ui 依存禁止の静的チェックのみ
+"$GODOT_BIN" --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit   # 全テスト
+```
 
 ## 絶対に守ること（詳細は constitution.md）
 
