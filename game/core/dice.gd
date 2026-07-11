@@ -4,6 +4,11 @@ static func roll(
 	mode: Types.RollMode,
 	rng: RandomNumberGenerator,
 ) -> Dictionary[String, Variant]:
+	# 範囲外の値が黙って DISADVANTAGE 扱いにならないよう先に弾く。
+	assert(
+		Types.RollMode.values().has(mode),
+		"不正な RollMode 値です: %d" % mode,
+	)
 	var dice_count: int = 2 if mode == Types.RollMode.NORMAL else 3
 	var dice: Array[int] = []
 	for _roll_index: int in range(dice_count):
