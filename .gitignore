@@ -4,3 +4,15 @@
 # OS
 Thumbs.db
 .DS_Store
+
+# Godot
+.godot/
+
+# ローカル開発ツール・生成物
+# addons/gut は setup.sh が作るシンボリックリンクのため末尾スラッシュなしで指定する
+.tooling/
+addons/gut
+
+# 配布モデル（骨格だけは追跡する）
+models/*
+!models/.gdkeep
