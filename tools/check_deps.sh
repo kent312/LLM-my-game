@@ -5,11 +5,12 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly CORE_DIR="${REPO_ROOT}/game/core"
+readonly FLOW_DIR="${REPO_ROOT}/game/flow"
 readonly AI_DIR="${REPO_ROOT}/game/ai"
 readonly UI_DIR="${REPO_ROOT}/game/ui"
 
 # 検査対象が存在しないままチェックが黙って成功しないよう、必須ディレクトリを先に確認する。
-for required_dir in "${CORE_DIR}" "${AI_DIR}" "${UI_DIR}"; do
+for required_dir in "${CORE_DIR}" "${FLOW_DIR}" "${AI_DIR}" "${UI_DIR}"; do
     if [[ ! -d "${required_dir}" ]]; then
         printf '依存規則チェック: 必須ディレクトリがありません: %s\n' "${required_dir}" >&2
         exit 1
@@ -108,6 +109,39 @@ fi
 if (( ${#violations[@]} > 0 )); then
     printf '依存規則違反: game/core から game/ai または game/ui を参照しています。\n' >&2
     printf '  %s\n' "${violations[@]}" >&2
+    exit 1
+fi
+
+# ARCH-2: ゲームロジックは具象モックを知らず、LLMBackend 型だけに依存する。
+# tests/ と game/ai/ はモックの定義・利用場所なので検査対象外とする。
+declare -a logic_files=()
+for logic_dir in "${CORE_DIR}" "${FLOW_DIR}" "${UI_DIR}"; do
+    while IFS= read -r -d '' logic_file; do
+        logic_files+=("${logic_file}")
+    done < <(find "${logic_dir}" -type f -name '*.gd' -print0)
+done
+
+declare -a mock_violations=()
+collect_logic_matches() {
+    local pattern="$1"
+    local mode="$2"
+    local logic_file="" match=""
+
+    for logic_file in "${logic_files[@]}"; do
+        while IFS= read -r match; do
+            if [[ -n "${match}" ]]; then
+                mock_violations+=("${logic_file}:${match}")
+            fi
+        done < <(strip_gd_lines "${logic_file}" "${mode}" | grep -E "${pattern}" || true)
+    done
+}
+
+collect_logic_matches "(^|[^[:alnum:]_])BackendMock([^[:alnum:]_]|$)" "code"
+collect_logic_matches "(^|[^[:alnum:]_])backend_mock([.]gd)?([^[:alnum:]_]|$)" "text"
+
+if (( ${#mock_violations[@]} > 0 )); then
+    printf '依存規則違反: ゲームロジックが具象モック BackendMock を参照しています（ARCH-2）。\n' >&2
+    printf '  %s\n' "${mock_violations[@]}" >&2
     exit 1
 fi
 
