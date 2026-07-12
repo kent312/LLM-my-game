@@ -1,0 +1,10 @@
+[
+	{
+		"id": "goblin",
+		"name_ja": "ゴブリン",
+		"threat": 1,
+		"hp": 4,
+		"attack": 2,
+		"traits": ["cowardly", "pack"]
+	}
+]

@@ -1,0 +1,62 @@
+{
+	"id": "test_fixture",
+	"title": "シナリオローダ試験",
+	"estimated_minutes": 10,
+	"intro_ja": "洞窟の入口にゴブリンの足跡が続いている。",
+	"scenes": [
+		{
+			"id": "entrance",
+			"goal_ja": "洞窟の奥へ進む",
+			"mood_tags": ["cave", "uneasy"],
+			"checks": [
+				{
+					"id": "check_find_path",
+					"trigger_hint": "安全な道を探す",
+					"ability": "WIS",
+					"situation_mod": 0,
+					"on_success": {
+						"set_flags": {"path_found": true},
+						"goto": "depths"
+					},
+					"on_partial": {
+						"advance_clock": 1,
+						"complication": "torch_lost"
+					},
+					"on_failure": {"damage": 1}
+				}
+			],
+			"complications": [
+				{
+					"id": "torch_lost",
+					"effect": {"remove_item": "torch"},
+					"hint_ja": "松明を落とす"
+				}
+			],
+			"exits": [
+				{"goto": "depths", "condition": "flag:path_found"}
+			],
+			"enemies": ["goblin"]
+		},
+		{
+			"id": "depths",
+			"goal_ja": "ゴブリンを退ける",
+			"mood_tags": ["cave", "danger"],
+			"checks": [],
+			"complications": [],
+			"exits": [],
+			"enemies": ["goblin"]
+		},
+		{
+			"id": "rescue",
+			"goal_ja": "救助を受けて帰還する",
+			"mood_tags": ["relief"],
+			"checks": [],
+			"complications": [],
+			"exits": [],
+			"enemies": []
+		}
+	],
+	"enemies_ref": ["goblin"],
+	"on_defeat": {"goto": "rescue"},
+	"rewards": {"xp": 3, "money": 50}
+}
