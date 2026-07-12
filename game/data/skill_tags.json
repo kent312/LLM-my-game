@@ -1,0 +1,22 @@
+[
+  {
+    "id": "skill.stealth",
+    "label_ja": "隠密",
+    "hint_ja": "身を隠す、気配を消す、見つからずに移動する行動"
+  },
+  {
+    "id": "skill.perception",
+    "label_ja": "観察",
+    "hint_ja": "周囲を調べ、手がかりや異変に気づく行動"
+  },
+  {
+    "id": "knowledge.history",
+    "label_ja": "歴史",
+    "hint_ja": "歴史上の出来事、古代文明、遺物に関する知識"
+  },
+  {
+    "id": "craft.lockpicking",
+    "label_ja": "鍵開け",
+    "hint_ja": "錠前の仕組みを見抜き、道具で解錠する技術"
+  }
+]
