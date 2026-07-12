@@ -8,6 +8,14 @@
 			"id": "entrance",
 			"goal_ja": "洞窟の奥へ進む",
 			"mood_tags": ["cave", "uneasy"],
+			"npcs": [
+				{
+					"id": "guide",
+					"name": "案内人ロズ",
+					"persona_ja": "洞窟の道に詳しい案内人。",
+					"knows": ["flag:map_hint", "check:check_find_path"]
+				}
+			],
 			"checks": [
 				{
 					"id": "check_find_path",

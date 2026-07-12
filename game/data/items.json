@@ -1,0 +1,13 @@
+{
+	"items": [
+		{
+			"id": "torch",
+			"name_ja": "松明"
+		},
+		{
+			"id": "potion",
+			"name_ja": "治癒の薬",
+			"effect": {"heal": 3}
+		}
+	]
+}
