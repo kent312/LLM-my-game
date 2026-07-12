@@ -1,5 +1,10 @@
 [
   {
+    "id": "skill.athletics",
+    "label_ja": "運動",
+    "hint_ja": "走る、跳ぶ、登る、泳ぐなど、身体能力を使う行動"
+  },
+  {
     "id": "skill.stealth",
     "label_ja": "隠密",
     "hint_ja": "身を隠す、気配を消す、見つからずに移動する行動"
@@ -10,13 +15,108 @@
     "hint_ja": "周囲を調べ、手がかりや異変に気づく行動"
   },
   {
+    "id": "skill.lore",
+    "label_ja": "知識",
+    "hint_ja": "伝承や学問の知識を思い出し、情報を読み解く行動"
+  },
+  {
+    "id": "skill.medicine",
+    "label_ja": "医術",
+    "hint_ja": "傷や病気を診断し、応急手当や治療を行う行動"
+  },
+  {
+    "id": "skill.persuasion",
+    "label_ja": "説得",
+    "hint_ja": "対話や交渉で相手を納得させ、協力を引き出す行動"
+  },
+  {
+    "id": "skill.intimidation",
+    "label_ja": "威圧",
+    "hint_ja": "迫力や脅しで相手を怖がらせ、従わせる行動"
+  },
+  {
+    "id": "skill.craft",
+    "label_ja": "細工",
+    "hint_ja": "道具を扱い、物を作る、直す、仕掛けを操作する行動"
+  },
+  {
+    "id": "skill.survival",
+    "label_ja": "生存",
+    "hint_ja": "野外で道を探し、食料や安全な場所を確保する行動"
+  },
+  {
+    "id": "skill.tactics",
+    "label_ja": "戦術",
+    "hint_ja": "戦況を読み、作戦や有利な配置を考える行動"
+  },
+  {
     "id": "knowledge.history",
     "label_ja": "歴史",
     "hint_ja": "歴史上の出来事、古代文明、遺物に関する知識"
   },
   {
+    "id": "knowledge.religion",
+    "label_ja": "宗教",
+    "hint_ja": "宗教、神話、儀式、聖職者に関する知識"
+  },
+  {
+    "id": "knowledge.nature",
+    "label_ja": "自然",
+    "hint_ja": "地形、天候、生態系など自然環境に関する知識"
+  },
+  {
+    "id": "knowledge.occult",
+    "label_ja": "オカルト",
+    "hint_ja": "魔術、怪異、呪い、超常現象に関する知識"
+  },
+  {
+    "id": "knowledge.streetwise",
+    "label_ja": "裏社会",
+    "hint_ja": "街の噂、裏社会、犯罪組織、地域事情に関する知識"
+  },
+  {
     "id": "craft.lockpicking",
     "label_ja": "鍵開け",
     "hint_ja": "錠前の仕組みを見抜き、道具で解錠する技術"
+  },
+  {
+    "id": "craft.cooking",
+    "label_ja": "料理",
+    "hint_ja": "食材を選び、料理や保存食を作る技術"
+  },
+  {
+    "id": "craft.mechanics",
+    "label_ja": "機械",
+    "hint_ja": "機械や装置の仕組みを理解し、修理や操作を行う技術"
+  },
+  {
+    "id": "social.performance",
+    "label_ja": "芸能",
+    "hint_ja": "演技、歌、踊り、楽器などで人を惹きつける技術"
+  },
+  {
+    "id": "social.deception",
+    "label_ja": "欺瞞",
+    "hint_ja": "嘘、変装、はったりで相手を欺く行動"
+  },
+  {
+    "id": "social.etiquette",
+    "label_ja": "礼儀作法",
+    "hint_ja": "礼儀、慣習、身分作法に沿って振る舞う知識"
+  },
+  {
+    "id": "nature.animals",
+    "label_ja": "動物",
+    "hint_ja": "動物の習性を理解し、扱う、なだめる、追跡する技術"
+  },
+  {
+    "id": "nature.plants",
+    "label_ja": "植物",
+    "hint_ja": "植物や菌類を見分け、採取や利用を行う知識"
+  },
+  {
+    "id": "body.acrobatics",
+    "label_ja": "軽業",
+    "hint_ja": "宙返り、綱渡り、体勢維持など身軽さを生かす行動"
   }
 ]
