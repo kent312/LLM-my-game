@@ -1,0 +1,99 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$comment": "target.enum の番兵値は意図分類時に GameState 由来の許可IDへ置換する。",
+	"title": "意図分類",
+	"type": "object",
+	"additionalProperties": false,
+	"required": [
+		"action_type",
+		"ability",
+		"skill_tags",
+		"target",
+		"difficulty",
+		"needs_roll",
+		"summary_ja"
+	],
+	"properties": {
+		"action_type": {
+			"type": "string",
+			"enum": [
+				"check",
+				"talk",
+				"move",
+				"item",
+				"attack",
+				"other"
+			]
+		},
+		"ability": {
+			"type": "string",
+			"enum": [
+				"STR",
+				"DEX",
+				"CON",
+				"INT",
+				"WIS",
+				"CHA"
+			]
+		},
+		"skill_tags": {
+			"type": "array",
+			"items": {
+				"type": "string",
+				"enum": [
+					"skill.athletics",
+					"skill.stealth",
+					"skill.perception",
+					"skill.lore",
+					"skill.medicine",
+					"skill.persuasion",
+					"skill.intimidation",
+					"skill.craft",
+					"skill.survival",
+					"skill.tactics",
+					"knowledge.history",
+					"knowledge.religion",
+					"knowledge.nature",
+					"knowledge.occult",
+					"knowledge.streetwise",
+					"craft.lockpicking",
+					"craft.cooking",
+					"craft.mechanics",
+					"social.performance",
+					"social.deception",
+					"social.etiquette",
+					"nature.animals",
+					"nature.plants",
+					"body.acrobatics"
+				]
+			},
+			"minItems": 0,
+			"maxItems": 2
+		},
+		"target": {
+			"$comment": "enum の番兵値を実行時の target ID 全件へ置換し、null は残す。",
+			"type": [
+				"string",
+				"null"
+			],
+			"enum": [
+				"__TARGET_ENUM_RUNTIME__",
+				null
+			]
+		},
+		"difficulty": {
+			"type": "string",
+			"enum": [
+				"easy",
+				"normal",
+				"hard"
+			]
+		},
+		"needs_roll": {
+			"type": "boolean"
+		},
+		"summary_ja": {
+			"type": "string"
+		}
+	}
+}

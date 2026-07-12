@@ -5,6 +5,7 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly INVOCATION_DIR="$(pwd)"
+readonly GENERATED_DIR="${REPO_ROOT}/game/data/generated"
 
 source "${SCRIPT_DIR}/versions.sh"
 
@@ -57,6 +58,39 @@ if [[ ! "${GODOT_VERSION_ACTUAL}" =~ ${GODOT_VERSION_REGEX} ]]; then
     exit 1
 fi
 printf 'Godot: %s\n' "${GODOT_VERSION_ACTUAL}"
+
+if [[ ! -d "${GENERATED_DIR}" ]]; then
+    printf '文法生成物ディレクトリがありません: %s\n' "${GENERATED_DIR}" >&2
+    exit 1
+fi
+
+CHECK_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/llmtrpg-checks.XXXXXX")"
+readonly CHECK_TMP_DIR
+trap 'rm -rf -- "${CHECK_TMP_DIR}"' EXIT
+
+# CI・サンドボックスでもホーム配下を汚さず実行できるよう、Godot のユーザーデータを隔離する。
+export XDG_DATA_HOME="${CHECK_TMP_DIR}/xdg-data"
+export XDG_CACHE_HOME="${CHECK_TMP_DIR}/xdg-cache"
+export XDG_CONFIG_HOME="${CHECK_TMP_DIR}/xdg-config"
+mkdir -p "${XDG_DATA_HOME}" "${XDG_CACHE_HOME}" "${XDG_CONFIG_HOME}"
+
+readonly GRAMMAR_TMP_DIR="${CHECK_TMP_DIR}/generated"
+mkdir -p "${GRAMMAR_TMP_DIR}"
+
+"${GODOT_EXECUTABLE}" \
+    --headless \
+    --path "${REPO_ROOT}" \
+    -s res://tools/gen_grammar.gd \
+    -- \
+    --input "${REPO_ROOT}/game/data/skill_tags.json" \
+    --output "${GRAMMAR_TMP_DIR}"
+
+if ! diff -ru -- "${GENERATED_DIR}" "${GRAMMAR_TMP_DIR}"; then
+    printf '文法生成物が最新ではありません。tools/gen_grammar.gd で再生成してください。\n' >&2
+    exit 1
+fi
+printf '文法生成物チェック: 差分なし\n'
+
 "${GODOT_EXECUTABLE}" --headless --import --path "${REPO_ROOT}"
 
 declare -a test_files=()

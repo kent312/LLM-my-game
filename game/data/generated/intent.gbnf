@@ -1,0 +1,15 @@
+# tools/gen_grammar.gd により skill_tags.json から自動生成されます。
+# target-enum の右辺は実行時に GameState 由来の許可ID選択肢へ必ず置換します。
+# 未置換の番兵値 __TARGET_ENUM_RUNTIME__ を分類に使用してはいけません。
+root ::= "{" ws "\"action_type\"" ws ":" ws action-type ws "," ws "\"ability\"" ws ":" ws ability ws "," ws "\"skill_tags\"" ws ":" ws skill-tags ws "," ws "\"target\"" ws ":" ws target ws "," ws "\"difficulty\"" ws ":" ws difficulty ws "," ws "\"needs_roll\"" ws ":" ws needs-roll ws "," ws "\"summary_ja\"" ws ":" ws json-string ws "}" ws
+action-type ::= "\"check\"" | "\"talk\"" | "\"move\"" | "\"item\"" | "\"attack\"" | "\"other\""
+ability ::= "\"STR\"" | "\"DEX\"" | "\"CON\"" | "\"INT\"" | "\"WIS\"" | "\"CHA\""
+skill-tags ::= "[" ws (skill-tag (ws "," ws skill-tag)?)? ws "]"
+skill-tag ::= "\"skill.athletics\"" | "\"skill.stealth\"" | "\"skill.perception\"" | "\"skill.lore\"" | "\"skill.medicine\"" | "\"skill.persuasion\"" | "\"skill.intimidation\"" | "\"skill.craft\"" | "\"skill.survival\"" | "\"skill.tactics\"" | "\"knowledge.history\"" | "\"knowledge.religion\"" | "\"knowledge.nature\"" | "\"knowledge.occult\"" | "\"knowledge.streetwise\"" | "\"craft.lockpicking\"" | "\"craft.cooking\"" | "\"craft.mechanics\"" | "\"social.performance\"" | "\"social.deception\"" | "\"social.etiquette\"" | "\"nature.animals\"" | "\"nature.plants\"" | "\"body.acrobatics\""
+target ::= target-enum | "null"
+target-enum ::= "\"__TARGET_ENUM_RUNTIME__\""
+difficulty ::= "\"easy\"" | "\"normal\"" | "\"hard\""
+needs-roll ::= "true" | "false"
+json-string ::= "\"" json-char* "\""
+json-char ::= [^"\\\x7F\x00-\x1F] | [\\] (["\\/bfnrt] | "u" [0-9a-fA-F]{4})
+ws ::= [ \t\n\r]{0,20}
