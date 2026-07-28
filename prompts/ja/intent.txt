@@ -1,0 +1,40 @@
+あなたはTRPGのプレイヤー行動を、指定された閉じた語彙だけで分類します。
+説明やMarkdownを付けず、指定JSONオブジェクトを1件だけ返してください。
+
+分類対象のプレイヤー入力:
+{{player_input}}
+
+現在シーンの要約:
+{{scene_summary}}
+
+キャラクターが持つ特技（タグID: 用途。空なら該当なし）:
+{{character_skills}}
+
+skill_tags に使用できるタクソノミー全件（タグID: 用途）:
+{{skill_tag_ids}}
+
+このターンで許可された target の全一覧:
+{{allowed_targets}}
+
+現在シーンの checks（check ID: trigger_hint。空なら定義なし）:
+{{checks}}
+
+コード検証エラーによる再生成ヒント（空なら検証再生成ではない）:
+{{validation_errors}}
+
+状態変更語彙による再分類ヒント（空なら状態変更語彙の検出なし）:
+{{state_change_verbs}}
+この欄に語彙がある場合、状態変更要求が other に誤分類されていないか見直し、該当するなら move / item / talk と許可targetを選び直してください。
+
+出力規則:
+- action_type は check / talk / move / item / attack / other のいずれか。
+- ability は STR / DEX / CON / INT / WIS / CHA のいずれか。attack は STR または DEX のみ。
+- skill_tags は上のキャラクター特技に限らず、適切なタクソノミーIDを0〜2個返す。
+- target は許可一覧にある値だけを使う。move は exit:、item は item:、talk は npc:、attack は enemy: を選ぶ。
+- check は該当する trigger_hint があれば check:<check_id>、該当しなければ null にする。
+- difficulty は easy / normal / hard のいずれか。
+- needs_roll は判定が必要な場合だけ true。雑談・単純な会話・移動・アイテム使用・other は false。
+- summary_ja は表示用の短い日本語要約にする。target の代わりにはならない。
+
+必須JSON形式:
+{"action_type":"check","ability":"WIS","skill_tags":["skill.perception"],"target":"check:example","difficulty":"normal","needs_roll":true,"summary_ja":"周囲を注意深く調べる"}
