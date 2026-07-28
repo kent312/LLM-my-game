@@ -41,13 +41,13 @@ const CONFIRMED_OPTIONAL_FIELDS: Array[String] = [
 	"applied_tag",
 ]
 const CONFIRMED_REMOVABLE_FIELDS: Array[String] = [
-	"applied_effects",
 	"rejected_tags",
 	"dice",
 	"kept",
 	"ability_mod",
 	"skill_bonus",
 	"situation_mod",
+	"applied_effects",
 ]
 
 
@@ -150,6 +150,8 @@ func build_prompt(
 	recent_logs: Array,
 	confirmed_result: Variant,
 ) -> PromptBuildResult:
+	# TurnMachineは出力ガードレールを必須化するためnarrate()ではなく、
+	# 本メソッドで組み立てたpromptをGuardrails.generate_filtered()へ渡す。
 	var result: PromptBuildResult = PromptBuildResult.new()
 	var system_prompt: String = _read_text(SYSTEM_PROMPT_PATH, result.errors)
 	var narrate_template: String = _read_text(NARRATE_PROMPT_PATH, result.errors)
@@ -298,6 +300,8 @@ func _build_confirmed_result(confirmed_result: Variant) -> String:
 				source.get("confirmed_complication", source.get("complication_id", "")),
 			)
 		),
+		# 効果の要点は文字数予算でも削除せず、適用済み事実を描写へ必ず渡す。
+		"effects": _truncate_text(String(source.get("effects", "")), 80),
 	}
 	for field_name: String in CONFIRMED_OPTIONAL_FIELDS:
 		if source.has(field_name):

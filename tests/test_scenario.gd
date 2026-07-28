@@ -199,6 +199,8 @@ func test_game_state_serialize_and_deserialize_round_trip() -> void:
 	state.clock = 2
 	state.turn_count = 5
 	state.pending_narration = {"kind": "check", "tier": "partial"}
+	state.rolling_summary = "洞窟の入口で道を探している。"
+	state.recent_logs = ["最初のターン", "次のターン"]
 	var serialized: Dictionary[String, Variant] = state.serialize()
 
 	var result: GameState.LoadResult = GameState.deserialize(JSON.stringify(serialized))
@@ -207,6 +209,40 @@ func test_game_state_serialize_and_deserialize_round_trip() -> void:
 	if result.state == null:
 		return
 	assert_eq(result.state.serialize(), serialized)
+
+
+func test_game_state_ai_context_round_trip_and_broken_context_falls_back() -> void:
+	var state: GameState = _state()
+	state.rolling_summary = "保存されるローリングサマリー"
+	state.recent_logs = ["保存ログ1", "保存ログ2"]
+	state.pending_narration = {
+		"confirmed_result": {
+			"tier": "SUCCESS",
+			"dice": [6, 4],
+			"natural": 10,
+		},
+	}
+
+	var round_trip: GameState.LoadResult = GameState.deserialize(
+		JSON.stringify(state.serialize())
+	)
+
+	assert_true(round_trip.is_success(), str(round_trip.errors))
+	assert_eq(round_trip.state.rolling_summary, state.rolling_summary)
+	assert_eq(round_trip.state.recent_logs, state.recent_logs)
+	var pending: Dictionary = round_trip.state.pending_narration
+	var confirmed: Dictionary = pending["confirmed_result"]
+	assert_eq(typeof(confirmed["natural"]), TYPE_INT)
+	assert_eq(confirmed["dice"], [6, 4])
+
+	var broken_data: Dictionary[String, Variant] = state.serialize()
+	broken_data["rolling_summary"] = {"broken": true}
+	broken_data["recent_logs"] = ["維持するログ", {"broken": true}, 12]
+	var broken: GameState.LoadResult = GameState.deserialize(broken_data)
+
+	assert_true(broken.is_success(), str(broken.errors))
+	assert_eq(broken.state.rolling_summary, "")
+	assert_eq(broken.state.recent_logs, ["維持するログ"])
 
 
 func _fixture() -> Scenario:

@@ -8,6 +8,8 @@ var active_enemies: Array[Dictionary] = []
 var clock: int = 0
 var turn_count: int = 0
 var pending_narration: Variant = null
+var rolling_summary: String = ""
+var recent_logs: Array[String] = []
 
 
 class LoadResult:
@@ -34,6 +36,8 @@ func serialize() -> Dictionary[String, Variant]:
 		"clock": clock,
 		"turn_count": turn_count,
 		"pending_narration": _duplicate_variant(pending_narration),
+		"rolling_summary": rolling_summary,
+		"recent_logs": recent_logs.duplicate(),
 	}
 
 
@@ -91,7 +95,17 @@ static func deserialize(source: Variant) -> LoadResult:
 		)
 	state.clock = int(root["clock"])
 	state.turn_count = int(root["turn_count"])
-	state.pending_narration = root["pending_narration"]
+	# JSON往復で整数がfloat化しても、未描写の判定根拠は元の整数表現へ正規化する。
+	state.pending_narration = _normalize_json_numbers(root["pending_narration"])
+	# INV-7: AI用文脈の欠落・型破損は構造化状態のロードを止めず、安全な空値へ倒す。
+	if typeof(root.get("rolling_summary")) == TYPE_STRING:
+		state.rolling_summary = String(root["rolling_summary"])
+	var recent_logs_value: Variant = root.get("recent_logs", [])
+	if typeof(recent_logs_value) == TYPE_ARRAY:
+		var raw_recent_logs: Array = recent_logs_value
+		for log_value: Variant in raw_recent_logs:
+			if typeof(log_value) == TYPE_STRING:
+				state.recent_logs.append(String(log_value))
 	return LoadResult.new(state, errors)
 
 
@@ -205,4 +219,26 @@ static func _duplicate_variant(value: Variant) -> Variant:
 	if typeof(value) == TYPE_ARRAY:
 		var array_value: Array = value
 		return array_value.duplicate(true)
+	return value
+
+
+static func _normalize_json_numbers(value: Variant) -> Variant:
+	if typeof(value) == TYPE_DICTIONARY:
+		var source_dictionary: Dictionary = value
+		var normalized_dictionary: Dictionary = {}
+		for key_value: Variant in source_dictionary.keys():
+			normalized_dictionary[key_value] = _normalize_json_numbers(
+				source_dictionary[key_value]
+			)
+		return normalized_dictionary
+	if typeof(value) == TYPE_ARRAY:
+		var source_array: Array = value
+		var normalized_array: Array = []
+		for item: Variant in source_array:
+			normalized_array.append(_normalize_json_numbers(item))
+		return normalized_array
+	if typeof(value) == TYPE_FLOAT:
+		var float_value: float = value
+		if is_finite(float_value) and float_value == floor(float_value):
+			return int(float_value)
 	return value
