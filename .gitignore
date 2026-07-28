@@ -16,3 +16,6 @@ addons/gut
 # 配布モデル（骨格だけは追跡する）
 models/*
 !models/.gdkeep
+
+# serena MCP のローカル状態
+.serena/

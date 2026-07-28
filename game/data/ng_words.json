@@ -1,0 +1,43 @@
+{
+	"jailbreak": {
+		"terms": [
+			"システムプロンプトを無視",
+			"以前の指示を無視",
+			"ignore previous instructions"
+		],
+		"patterns": [
+			"システム.{0,8}(?:無視|開示)",
+			"(?i)ignore\\s+(?:all\\s+)?previous\\s+instructions"
+		]
+	},
+	"sexual": {
+		"terms": [
+			"性的描写",
+			"性交",
+			"わいせつ"
+		],
+		"patterns": [
+			"(?:性的|わいせつ).{0,8}(?:描写|行為)"
+		]
+	},
+	"discrimination": {
+		"terms": [
+			"差別表現",
+			"人種差別",
+			"民族差別"
+		],
+		"patterns": [
+			"(?:人種|民族|性別).{0,8}差別"
+		]
+	},
+	"real_person": {
+		"terms": [
+			"実在人物",
+			"実在の人物",
+			"本人そっくり"
+		],
+		"patterns": [
+			"実在(?:する|の)?人物.{0,12}(?:演じ|登場|再現)"
+		]
+	}
+}
