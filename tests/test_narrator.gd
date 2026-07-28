@@ -274,6 +274,39 @@ func test_08_judgment_result_is_normalized_through_dictionary_path() -> void:
 	assert_eq(confirmed.get("applied_tag", ""), "skill.perception")
 
 
+func test_09_concise_effects_survive_confirmed_result_budget() -> void:
+	var prompt_result: Narrator.PromptBuildResult = _narrator.build_prompt(
+		_state(),
+		_fixture(),
+		"",
+		[],
+		{
+			"tier": "SUCCESS",
+			"action_summary": "安全な道を見つける",
+			"complication": "",
+			"effects": "on_success: path_found=true, goto=depths",
+			"applied_effects": ["長い補足効果".repeat(60)],
+			"rejected_tags": ["長い不採用タグ".repeat(30)],
+			"dice": [6, 5],
+			"kept": [6, 5],
+			"ability_mod": 3,
+			"skill_bonus": 1,
+			"situation_mod": 0,
+		},
+	)
+	var confirmed_value: Variant = JSON.parse_string(
+		_section_after_heading(prompt_result.prompt, "【今回の確定情報】")
+	)
+	var confirmed: Dictionary = confirmed_value if typeof(confirmed_value) == TYPE_DICTIONARY else {}
+
+	assert_true(prompt_result.errors.is_empty())
+	assert_eq(
+		confirmed.get("effects", ""),
+		"on_success: path_found=true, goto=depths",
+	)
+	assert_false(confirmed.has("rejected_tags"))
+
+
 func _state() -> GameState:
 	var state: GameState = GameState.new()
 	state.scenario_id = "test_fixture"
