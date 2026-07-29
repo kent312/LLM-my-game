@@ -1,0 +1,36 @@
+{
+	"name": "ユノ・アサギリ",
+	"description": "霧に閉ざされた街道を歩く若い斥候。古い遺構の観察と、困っている相手への穏やかな交渉を得意とする。",
+	"abilities": {
+		"STR": -1,
+		"DEX": 1,
+		"CON": 1,
+		"INT": 1,
+		"WIS": 2,
+		"CHA": 1
+	},
+	"hp": {
+		"current": 10,
+		"max": 10
+	},
+	"skills": [
+		"skill.perception",
+		"skill.lore"
+	],
+	"specialties": [
+		{
+			"label": "古い機構の応急調整",
+			"tags": ["skill.craft", "craft.mechanics"]
+		},
+		{
+			"label": "不安を鎮める語り",
+			"tags": ["skill.persuasion", "social.etiquette"]
+		}
+	],
+	"xp": 0,
+	"inventory": [
+		{"item_id": "torch", "count": 1},
+		{"item_id": "potion", "count": 1}
+	],
+	"money": 12
+}
