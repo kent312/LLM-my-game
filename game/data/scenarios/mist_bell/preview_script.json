@@ -1,0 +1,52 @@
+{
+	"turns": [
+		{
+			"intent": {
+				"action_type": "check",
+				"ability": "STR",
+				"skill_tags": ["skill.perception"],
+				"target": "check:check_read_gate",
+				"difficulty": "normal",
+				"needs_roll": true,
+				"summary_ja": "霧門の刻印を読み解く"
+			},
+			"narration": "指先でなぞった刻印が淡く明滅する。霧は左右へ割れ、沈んだ書庫へ続く石段が姿を現した。"
+		},
+		{
+			"intent": {
+				"action_type": "check",
+				"ability": "INT",
+				"skill_tags": ["skill.lore"],
+				"target": "check:check_recover_key",
+				"difficulty": "normal",
+				"needs_roll": true,
+				"summary_ja": "水没書庫から月鍵を回収する"
+			},
+			"narration": "冷たい水の底から銀の月鍵を引き上げる。遠くで鐘が一度鳴り、天文台への扉が開いた。"
+		},
+		{
+			"intent": {
+				"action_type": "check",
+				"ability": "DEX",
+				"skill_tags": ["skill.craft"],
+				"target": "check:check_align_mirror",
+				"difficulty": "normal",
+				"needs_roll": true,
+				"summary_ja": "星見鏡を夜明けの角度へ合わせる"
+			},
+			"narration": "錆びた歯車が軋み、星見鏡は東の空を捉える。集めた光が一本の道となって聖堂へ伸びた。"
+		},
+		{
+			"intent": {
+				"action_type": "check",
+				"ability": "CHA",
+				"skill_tags": ["skill.persuasion"],
+				"target": "check:check_close_rift",
+				"difficulty": "normal",
+				"needs_roll": true,
+				"summary_ja": "残響へ帰るべき場所を語りかける"
+			},
+			"narration": "あなたの言葉に残響は静まり、裂け目は夜明けの光へ溶けていく。霧鐘村に朝が戻った。"
+		}
+	]
+}

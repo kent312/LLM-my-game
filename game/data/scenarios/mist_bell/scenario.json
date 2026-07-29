@@ -1,0 +1,209 @@
+{
+	"id": "mist_bell",
+	"title": "霧鐘の夜明け",
+	"estimated_minutes": 30,
+	"intro_ja": "夜明けを告げるはずの霧鐘が沈黙し、村は白い霧に閉ざされた。斥候ユノは、鐘楼へ光を戻すため古い巡礼路へ踏み出す。",
+	"scenes": [
+		{
+			"id": "fog_gate",
+			"goal_ja": "霧門の刻印を読み、沈んだ書庫への道を開く",
+			"mood_tags": ["village", "fog", "mystery"],
+			"npcs": [
+				{
+					"id": "keeper_sena",
+					"name": "鐘守セナ",
+					"persona_ja": "不安を隠して気丈に振る舞う老いた鐘守。",
+					"knows": ["flag:gate_open"]
+				}
+			],
+			"checks": [
+				{
+					"id": "check_read_gate",
+					"trigger_hint": "霧門の刻印を読み解く",
+					"ability": "WIS",
+					"situation_mod": 0,
+					"on_success": {
+						"set_flags": {"gate_open": true},
+						"goto": "sunken_archive"
+					},
+					"on_partial": {
+						"set_flags": {"gate_open": true},
+						"advance_clock": 1,
+						"complication": "fog_chill",
+						"goto": "sunken_archive"
+					},
+					"on_failure": {
+						"set_flags": {"gate_open": true},
+						"damage": 1,
+						"advance_clock": 1,
+						"goto": "sunken_archive"
+					}
+				}
+			],
+			"complications": [
+				{
+					"id": "fog_chill",
+					"effect": {"damage": 1},
+					"hint_ja": "冷たい霧に体力を奪われる"
+				}
+			],
+			"exits": [
+				{"goto": "sunken_archive", "condition": "flag:gate_open"}
+			],
+			"enemies": []
+		},
+		{
+			"id": "sunken_archive",
+			"goal_ja": "水没書庫から星見鏡を起動する月鍵を回収する",
+			"mood_tags": ["archive", "water", "echo"],
+			"checks": [
+				{
+					"id": "check_recover_key",
+					"trigger_hint": "崩れる書架を読み、月鍵を回収する",
+					"ability": "INT",
+					"situation_mod": 0,
+					"on_success": {
+						"add_item": {"item_id": "moon_key", "count": 1},
+						"set_flags": {"moon_key_found": true},
+						"goto": "observatory"
+					},
+					"on_partial": {
+						"add_item": {"item_id": "moon_key", "count": 1},
+						"set_flags": {"moon_key_found": true},
+						"complication": "soaked_supplies",
+						"goto": "observatory"
+					},
+					"on_failure": {
+						"add_item": {"item_id": "moon_key", "count": 1},
+						"set_flags": {"moon_key_found": true},
+						"damage": 2,
+						"goto": "observatory"
+					}
+				}
+			],
+			"complications": [
+				{
+					"id": "soaked_supplies",
+					"effect": {"remove_item": "torch"},
+					"hint_ja": "水しぶきで松明を失う"
+				}
+			],
+			"exits": [
+				{"goto": "observatory", "condition": "flag:moon_key_found"}
+			],
+			"enemies": []
+		},
+		{
+			"id": "observatory",
+			"goal_ja": "月鍵で星見鏡を動かし、夜明けの光路を作る",
+			"mood_tags": ["observatory", "stars", "machinery"],
+			"checks": [
+				{
+					"id": "check_align_mirror",
+					"trigger_hint": "星見鏡の歯車を調整する",
+					"ability": "DEX",
+					"situation_mod": 0,
+					"on_success": {
+						"set_flags": {"light_path": true},
+						"goto": "dawn_sanctum"
+					},
+					"on_partial": {
+						"set_flags": {"light_path": true},
+						"advance_clock": 1,
+						"complication": "cut_hand",
+						"goto": "dawn_sanctum"
+					},
+					"on_failure": {
+						"set_flags": {"light_path": true},
+						"damage": 2,
+						"advance_clock": 1,
+						"goto": "dawn_sanctum"
+					}
+				}
+			],
+			"complications": [
+				{
+					"id": "cut_hand",
+					"effect": {"damage": 1},
+					"hint_ja": "割れた鏡片で手を切る"
+				}
+			],
+			"exits": [
+				{"goto": "dawn_sanctum", "condition": "flag:light_path"}
+			],
+			"enemies": []
+		},
+		{
+			"id": "dawn_sanctum",
+			"goal_ja": "霧の残響を鎮め、霧鐘に夜明けを取り戻す",
+			"mood_tags": ["sanctum", "dawn", "hope"],
+			"npcs": [
+				{
+					"id": "mist_echo",
+					"name": "霧の残響",
+					"persona_ja": "帰る場所を忘れ、鐘の音に縋る古い記憶。",
+					"knows": ["flag:scenario_cleared"]
+				}
+			],
+			"checks": [
+				{
+					"id": "check_close_rift",
+					"trigger_hint": "残響に語りかけて裂け目を閉じる",
+					"ability": "CHA",
+					"situation_mod": 0,
+					"on_success": {
+						"set_flags": {"scenario_cleared": true}
+					},
+					"on_partial": {
+						"set_flags": {"scenario_cleared": true},
+						"advance_clock": 1,
+						"complication": "last_echo"
+					},
+					"on_failure": {
+						"set_flags": {"scenario_cleared": true},
+						"damage": 2,
+						"advance_clock": 1
+					}
+				}
+			],
+			"complications": [
+				{
+					"id": "last_echo",
+					"effect": {"damage": 1},
+					"hint_ja": "最後の残響が痛みを残す"
+				}
+			],
+			"exits": [],
+			"enemies": []
+		},
+		{
+			"id": "rescue",
+			"goal_ja": "鐘守セナの救助を受け、村へ帰還する",
+			"mood_tags": ["village", "relief"],
+			"checks": [
+				{
+					"id": "check_recover_from_rescue",
+					"trigger_hint": "手当てを受けて聖堂へ復帰する",
+					"ability": "CON",
+					"situation_mod": 1,
+					"on_success": {"goto": "dawn_sanctum"},
+					"on_partial": {"goto": "dawn_sanctum"},
+					"on_failure": {"goto": "dawn_sanctum"}
+				}
+			],
+			"complications": [],
+			"exits": [
+				{"goto": "dawn_sanctum"}
+			],
+			"enemies": []
+		}
+	],
+	"enemies_ref": [],
+	"on_defeat": {
+		"goto": "rescue"
+	},
+	"rewards": {
+		"xp": 4,
+		"money": 35
+	}
+}

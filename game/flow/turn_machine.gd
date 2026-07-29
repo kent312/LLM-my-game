@@ -8,6 +8,7 @@ signal save_flushed(slot: int)
 signal narration_started(resumed: bool)
 signal narration_finished(text: String)
 signal judgment_resolved(result: Judgment.Result)
+signal scenario_completed(xp: int, money: int)
 signal turn_failed(message: String)
 
 
@@ -36,6 +37,7 @@ var recent_logs: Array[String] = []
 var rolling_summary: String = ""
 var last_error: String = ""
 var last_intent: IntentClassifier.Result = null
+var last_judgment_request: Judgment.Request = null
 var last_judgment: Judgment.Result = null
 var last_action_resolution: ActionResolver.ActionResolution = null
 var last_check_resolution: CheckResolver.CheckResolution = null
@@ -102,6 +104,7 @@ func submit_input(player_input: String, scene_summary: String = "") -> bool:
 
 	last_error = ""
 	last_intent = null
+	last_judgment_request = null
 	last_judgment = null
 	last_action_resolution = null
 	last_check_resolution = null
@@ -148,8 +151,12 @@ func submit_input(player_input: String, scene_summary: String = "") -> bool:
 	var confirmed_result: Dictionary[String, Variant] = {}
 	if intent.needs_roll:
 		_transition_to(State.ROLLING)
-		var roll_request: Judgment.Request = _request_for_roll(intent)
-		last_judgment = Judgment.resolve(roll_request, _state.character, _rng)
+		last_judgment_request = _request_for_roll(intent)
+		last_judgment = Judgment.resolve(
+			last_judgment_request,
+			_state.character,
+			_rng,
+		)
 		judgment_resolved.emit(last_judgment)
 		_transition_to(State.COMMITTING)
 		if DETERMINISTIC_ACTION_TYPES.has(intent.action_type):
@@ -176,6 +183,10 @@ func submit_input(player_input: String, scene_summary: String = "") -> bool:
 		_transition_to(State.COMMITTING)
 		confirmed_result = _confirmed_action_result(intent, last_action_resolution)
 
+	var completion_rewards: Dictionary[String, Variant] = _grant_completion_rewards()
+	if not bool(completion_rewards["success"]):
+		_transition_to(State.IDLE)
+		return false
 	_state.turn_count += 1
 	_state.pending_narration = _build_pending_narration(
 		player_input,
@@ -189,6 +200,11 @@ func submit_input(player_input: String, scene_summary: String = "") -> bool:
 		return false
 	_pending_narration_saved = true
 	save_flushed.emit(_slot)
+	if bool(completion_rewards["granted"]):
+		scenario_completed.emit(
+			int(completion_rewards["xp"]),
+			int(completion_rewards["money"]),
+		)
 
 	# COMMITTINGの保存フラッシュが成功した後にだけNARRATINGへ入る。
 	# 分類完了signalの配送も終えてから次の生成待機を開始し、接続順への依存を残さない。
@@ -566,7 +582,14 @@ func _current_scene_summary() -> String:
 
 
 func _judgment_to_dict(result: Judgment.Result) -> Dictionary[String, Variant]:
+	var ability_id: String = ""
+	var roll_mode: String = ""
+	if last_judgment_request != null:
+		ability_id = _ability_id(last_judgment_request.ability)
+		roll_mode = _roll_mode_id(last_judgment_request.roll_mode)
 	return {
+		"ability": ability_id,
+		"roll_mode": roll_mode,
 		"dice": _integer_array(result.dice),
 		"kept": _integer_array(result.kept),
 		"natural": int(result.natural),
@@ -642,6 +665,36 @@ func _ability_from_id(ability_id: String) -> Types.Ability:
 			return Types.Ability.STR
 
 
+func _ability_id(ability: Types.Ability) -> String:
+	match ability:
+		Types.Ability.STR:
+			return "STR"
+		Types.Ability.DEX:
+			return "DEX"
+		Types.Ability.CON:
+			return "CON"
+		Types.Ability.INT:
+			return "INT"
+		Types.Ability.WIS:
+			return "WIS"
+		Types.Ability.CHA:
+			return "CHA"
+		_:
+			return ""
+
+
+func _roll_mode_id(roll_mode: Types.RollMode) -> String:
+	match roll_mode:
+		Types.RollMode.NORMAL:
+			return "NORMAL"
+		Types.RollMode.ADVANTAGE:
+			return "ADVANTAGE"
+		Types.RollMode.DISADVANTAGE:
+			return "DISADVANTAGE"
+		_:
+			return ""
+
+
 func _tier_name(tier: Types.ResultTier) -> String:
 	match tier:
 		Types.ResultTier.FUMBLE:
@@ -671,6 +724,8 @@ func _judgment_log_from_confirmed(
 	if not confirmed.has("dice"):
 		return {}
 	var fields: Array[String] = [
+		"ability",
+		"roll_mode",
 		"dice",
 		"kept",
 		"natural",
@@ -712,6 +767,35 @@ func _check_effects_summary(
 	if resolution.applied_effects.is_empty():
 		return tr("%s: 効果なし") % prefix
 	return "%s: %s" % [prefix, " / ".join(resolution.applied_effects)]
+
+
+func _grant_completion_rewards() -> Dictionary[String, Variant]:
+	var result: Dictionary[String, Variant] = {
+		"success": true,
+		"granted": false,
+		"xp": 0,
+		"money": 0,
+	}
+	if not bool(_state.flags.get("scenario_cleared", false)):
+		return result
+	if bool(_state.flags.get("rewards_granted", false)):
+		return result
+	var xp_before: int = _state.character.xp
+	var money_before: int = _state.character.money
+	var reward_errors: Array[String] = _scenario.grant_rewards(_state)
+	if not reward_errors.is_empty():
+		# Scenario.load()がrewardsを検証済みなので通常は到達不能。破損した
+		# Scenarioインスタンスが注入された場合にも描写へ進めないため防御的に残す。
+		result["success"] = false
+		last_error = " / ".join(reward_errors)
+		turn_failed.emit(tr("シナリオ報酬を付与できませんでした。"))
+		return result
+	# 完了判定と同じCOMMITTING内で一度だけ付与し、pending_narrationと同時に保存する。
+	_state.flags["rewards_granted"] = true
+	result["granted"] = true
+	result["xp"] = _state.character.xp - xp_before
+	result["money"] = _state.character.money - money_before
+	return result
 
 
 func _sync_context_to_state() -> void:
