@@ -192,6 +192,7 @@ func _classify_internal(
 	var first_generation: GenerationResult = await _generate_once(
 		_render_prompt(prompt_template, prompt_values),
 		constraints,
+		player_input,
 	)
 	var first_validation: ValidationResult = _validate_response(
 		first_generation,
@@ -218,6 +219,7 @@ func _classify_internal(
 	var second_generation: GenerationResult = await _generate_once(
 		_render_prompt(prompt_template, prompt_values),
 		constraints,
+		player_input,
 	)
 	var second_validation: ValidationResult = _validate_response(
 		second_generation,
@@ -432,6 +434,7 @@ func _apply_other_safety(
 	var generation: GenerationResult = await _generate_once(
 		_render_prompt(prompt_template, reclassification_values),
 		constraints,
+		player_input,
 	)
 	var validation: ValidationResult = _validate_response(
 		generation,
@@ -457,7 +460,11 @@ func _apply_other_safety(
 	return result
 
 
-func _generate_once(prompt: String, constraints: RuntimeConstraints) -> GenerationResult:
+func _generate_once(
+	prompt: String,
+	constraints: RuntimeConstraints,
+	player_input: String,
+) -> GenerationResult:
 	var result: GenerationResult = GenerationResult.new()
 	if _waiting_for_generation:
 		result.failed = true
@@ -471,6 +478,10 @@ func _generate_once(prompt: String, constraints: RuntimeConstraints) -> Generati
 	if _backend.supports_constrained_output():
 		opts.grammar = constraints.grammar
 		opts.json_schema = constraints.schema.duplicate(true)
+	opts.external_context = {
+		"system_prompt": _prompt_without_player_input(prompt, player_input),
+		"player_input": player_input,
+	}
 	prompt_history.append(prompt)
 	options_history.append(opts)
 	_waiting_for_generation = true
@@ -482,6 +493,14 @@ func _generate_once(prompt: String, constraints: RuntimeConstraints) -> Generati
 	result.response = String(settled[0])
 	result.failed = bool(settled[1])
 	return result
+
+
+func _prompt_without_player_input(prompt: String, player_input: String) -> String:
+	if player_input.is_empty():
+		return prompt
+	# 外部APIでは自由入力をsystemロールへ混ぜず、userロールだけに置く。
+	# ローカルバックエンドへ渡す元promptは変更しない。
+	return prompt.replace(player_input, tr("（プレイヤー入力はuserメッセージを参照）"))
 
 
 func _validate_response(

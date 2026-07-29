@@ -60,6 +60,7 @@ class GenerationResult:
 
 class PromptBuildResult:
 	var prompt: String = ""
+	var external_context: Dictionary[String, String] = {}
 	var errors: Array[String] = []
 
 
@@ -129,6 +130,7 @@ func narrate(
 	var opts: LLMBackend.GenOpts = LLMBackend.GenOpts.new()
 	opts.max_tokens = OUTPUT_MAX_TOKENS
 	opts.temperature = 0.8
+	opts.external_context = prompt_result.external_context.duplicate(true)
 	prompt_history.append(result.prompt)
 	options_history.append(opts)
 
@@ -178,6 +180,23 @@ func build_prompt(
 		"confirmed_result": _build_confirmed_result(confirmed_result),
 	}
 	result.prompt = _render_prompt(narrate_template, values)
+	result.external_context = {
+		"system_prompt": (
+			system_prompt
+			+ "\n\n"
+			+ tr("確定済みの結果を変更せず、場面描写だけを返してください。")
+		),
+		"character_sheet_summary": values["character_summary"],
+		"current_scene": (
+			values["scene_context"]
+			+ "\n\n"
+			+ tr("今回の確定情報:")
+			+ "\n"
+			+ values["confirmed_result"]
+		),
+		"conversation_history": values["recent_logs"],
+		"conversation_summary": values["rolling_summary"],
+	}
 	return result
 
 

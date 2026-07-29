@@ -1,10 +1,5 @@
 class_name LLMBackend
 
-signal token_streamed(text: String)
-signal generation_finished(full_text: String)
-signal generation_failed(error: Variant)
-
-
 class LLMError:
 	var code: String
 	var message: String
@@ -21,6 +16,18 @@ class GenOpts:
 	var grammar: String = ""
 	var json_schema: Dictionary = {}
 	var stop: Array[String] = []
+	# 外部送信時だけ参照する、仕様書4.5のallowlist済み文脈。
+	# ローカル/モックは従来通りgenerate()のpromptだけを利用する。
+	var external_context: Dictionary[String, String] = {}
+
+
+signal token_streamed(text: String)
+signal generation_finished(full_text: String)
+signal generation_failed(error: LLMError)
+signal fallback_switch_proposed(error: LLMError)
+signal fallback_declined()
+signal fallback_mode_changed(using_fallback: bool)
+signal constrained_output_support_changed(supported: bool)
 
 
 func generate(prompt: String, opts: GenOpts) -> void:
@@ -40,10 +47,22 @@ func supports_constrained_output() -> bool:
 	return false
 
 
+func respond_to_fallback(_accepted: bool) -> void:
+	pass
+
+
+func retry_pending_request() -> void:
+	pass
+
+
+func has_pending_fallback() -> bool:
+	return false
+
+
 func _emit_not_implemented_error(_prompt: String, _opts: GenOpts) -> void:
 	generation_failed.emit(
 		LLMError.new(
 			"backend_not_implemented",
-			"LLMバックエンドが実装されていません。",
+			tr("LLMバックエンドが実装されていません。"),
 		)
 	)

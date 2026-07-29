@@ -8,6 +8,8 @@ const SAVE_SLOT: int = 0
 var _scenario: Scenario
 var _state: GameState
 var _save_manager: SaveManager
+var _settings_store: ExternalSettingsStore
+var _external_settings: Dictionary[String, Variant] = {}
 var _backend: LLMBackend
 var _machine: TurnMachine
 var _log_entries: Array[Dictionary] = []
@@ -30,6 +32,12 @@ var _scene_label: Label
 var _state_label: Label
 var _dice_label: Label
 var _hint_label: Label
+var _external_indicator: ExternalConnectionIndicator
+var _settings_dialog: ExternalSettingsDialog
+var _fallback_dialog: ConfirmationDialog
+var _retry_external_button: Button
+var _last_submitted_input: String = ""
+var _fallback_waiting: bool = false
 
 
 func _ready() -> void:
@@ -84,6 +92,17 @@ func _build_interface() -> void:
 	_title_label.add_theme_color_override("font_color", Color("#e8d9ae"))
 	story_column.add_child(_title_label)
 
+	var connection_row: HBoxContainer = HBoxContainer.new()
+	connection_row.add_theme_constant_override("separation", 10)
+	story_column.add_child(connection_row)
+	_external_indicator = ExternalConnectionIndicator.new()
+	_external_indicator.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	connection_row.add_child(_external_indicator)
+	var settings_button: Button = Button.new()
+	settings_button.text = tr("外部AI接続設定")
+	settings_button.pressed.connect(_on_settings_pressed)
+	connection_row.add_child(settings_button)
+
 	_scene_label = Label.new()
 	_scene_label.add_theme_font_size_override("font_size", 14)
 	_scene_label.add_theme_color_override("font_color", Color("#90a5c2"))
@@ -128,6 +147,12 @@ func _build_interface() -> void:
 	_resume_button.visible = false
 	_resume_button.pressed.connect(_on_resume_pressed)
 	story_column.add_child(_resume_button)
+
+	_retry_external_button = Button.new()
+	_retry_external_button.text = tr("保持した入力で外部AIへ再接続")
+	_retry_external_button.visible = false
+	_retry_external_button.pressed.connect(_on_retry_external_pressed)
+	story_column.add_child(_retry_external_button)
 
 	_new_game_button = Button.new()
 	_new_game_button.text = tr("新しく始める")
@@ -181,6 +206,21 @@ func _build_interface() -> void:
 	_state_label.add_theme_color_override("font_color", Color("#79899e"))
 	side_column.add_child(_state_label)
 
+	_settings_store = ExternalSettingsStore.new()
+	_settings_dialog = ExternalSettingsDialog.new(_settings_store)
+	_settings_dialog.settings_saved.connect(_on_external_settings_saved)
+	add_child(_settings_dialog)
+	_fallback_dialog = ConfirmationDialog.new()
+	_fallback_dialog.title = tr("外部AIへの接続に失敗しました")
+	_fallback_dialog.dialog_text = tr(
+		"3回の再試行後も接続できませんでした。同梱モデルへ一時的に切り替えますか？"
+	)
+	_fallback_dialog.ok_button_text = tr("同梱モデルへ切り替える")
+	_fallback_dialog.cancel_button_text = tr("入力を保持して待機する")
+	_fallback_dialog.confirmed.connect(_on_fallback_accepted)
+	_fallback_dialog.canceled.connect(_on_fallback_declined)
+	add_child(_fallback_dialog)
+
 
 func _add_section_heading(parent: VBoxContainer, text: String) -> void:
 	var heading: Label = Label.new()
@@ -205,6 +245,16 @@ func _load_content() -> bool:
 	_scenario = scenario_result.scenario
 	_title_label.text = String(_scenario.data.get("title", tr("AI TRPG")))
 	_save_manager = SaveManager.new()
+	var settings_result: ExternalSettingsStore.LoadResult = _settings_store.load_settings()
+	_external_settings = settings_result.settings
+	if not settings_result.is_success():
+		_append_log_entry(
+			tr("外部接続設定"),
+			tr("外部接続設定を読み込めないため、完全オフラインで起動しました。"),
+			"#d5b878",
+		)
+		_external_settings = _settings_store.default_settings()
+	_external_indicator.apply_settings(_external_settings)
 	_state = _load_saved_state()
 	if _state == null:
 		if _load_failed_closed:
@@ -217,7 +267,12 @@ func _load_content() -> bool:
 
 
 func _install_machine() -> void:
-	_backend = PreviewBackendFactory.create_for_state(_state)
+	_backend = ExternalBackendFactory.create_for_state(_external_settings, _state)
+	_backend.fallback_switch_proposed.connect(_on_fallback_proposed)
+	_backend.fallback_mode_changed.connect(_on_fallback_mode_changed)
+	_backend.constrained_output_support_changed.connect(
+		_on_constrained_output_support_changed
+	)
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.randomize()
 	_machine = TurnMachine.new(
@@ -329,6 +384,7 @@ func _submit_current_input() -> void:
 	var player_input: String = _input_line.text.strip_edges()
 	if player_input.is_empty():
 		return
+	_last_submitted_input = player_input
 	_input_line.clear()
 	_log_entries.append(
 		{"speaker": tr("あなた"), "text": player_input, "color": "#8fc6b2"}
@@ -336,6 +392,9 @@ func _submit_current_input() -> void:
 	_render_log()
 	_set_input_enabled(false)
 	await _machine.submit_input(player_input, _current_goal())
+	_last_submitted_input = ""
+	if not _fallback_waiting:
+		_input_line.clear()
 	_set_input_enabled(true)
 	_refresh_all()
 
@@ -469,6 +528,86 @@ func _on_turn_failed(message: String) -> void:
 		{"speaker": tr("エラー"), "text": message, "color": "#e58b8b"}
 	)
 	_render_log()
+
+
+func _on_settings_pressed() -> void:
+	if _busy and (_backend == null or not _backend.has_pending_fallback()):
+		return
+	_settings_dialog.popup_centered()
+
+
+func _on_external_settings_saved(settings: Dictionary) -> void:
+	_external_settings = settings.duplicate(true)
+	_fallback_waiting = false
+	_retry_external_button.visible = false
+	_external_indicator.apply_settings(_external_settings)
+	if _state != null:
+		if _machine != null and _machine.current_state != TurnMachine.State.IDLE:
+			_apply_settings_when_machine_idle.call_deferred(_machine)
+		else:
+			_install_machine()
+	_append_log_entry(
+		tr("外部接続設定"),
+		tr("AI接続設定を反映しました。"),
+		"#d5b878",
+	)
+
+
+func _on_fallback_proposed(_error: LLMBackend.LLMError) -> void:
+	_fallback_waiting = true
+	if not _last_submitted_input.is_empty():
+		_input_line.text = _last_submitted_input
+	_fallback_dialog.popup_centered()
+
+
+func _on_fallback_accepted() -> void:
+	if _backend != null:
+		_backend.respond_to_fallback(true)
+	_fallback_waiting = false
+	_input_line.clear()
+	_retry_external_button.visible = false
+
+
+func _on_fallback_declined() -> void:
+	if _backend != null:
+		_backend.respond_to_fallback(false)
+	_retry_external_button.visible = true
+
+
+func _on_retry_external_pressed() -> void:
+	if _backend != null:
+		_backend.retry_pending_request()
+		_external_indicator.apply_settings(_external_settings)
+	_fallback_waiting = false
+	_set_input_enabled(true)
+	_retry_external_button.visible = false
+
+
+func _on_fallback_mode_changed(using_fallback: bool) -> void:
+	_external_indicator.apply_fallback_state(using_fallback, _external_settings)
+
+
+func _on_constrained_output_support_changed(supported: bool) -> void:
+	if supported:
+		return
+	_settings_dialog.show_constrained_output_warning()
+	_append_log_entry(
+		tr("外部接続設定"),
+		tr("送信先は構造化出力に非対応です。分類が不安定になる可能性があります。"),
+		"#d5b878",
+	)
+
+
+func _apply_settings_when_machine_idle(previous_machine: TurnMachine) -> void:
+	var tree: SceneTree = Engine.get_main_loop() as SceneTree
+	while (
+		_machine == previous_machine
+		and previous_machine.current_state != TurnMachine.State.IDLE
+		and tree != null
+	):
+		await tree.process_frame
+	if _machine == previous_machine:
+		_install_machine()
 
 
 func _refresh_all() -> void:

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI TRPG 外部接続設定",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "connection_mode",
+    "external_enabled",
+    "endpoint",
+    "api_key",
+    "model",
+    "privacy_consent"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "connection_mode": {
+      "enum": ["bundled", "external_local", "cloud_api"]
+    },
+    "external_enabled": {"type": "boolean"},
+    "endpoint": {"type": "string"},
+    "api_key": {"type": "string"},
+    "model": {"type": "string"},
+    "privacy_consent": {"type": "boolean"}
+  }
+}

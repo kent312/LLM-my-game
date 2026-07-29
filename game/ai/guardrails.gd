@@ -385,6 +385,7 @@ func _copy_options(source: LLMBackend.GenOpts) -> LLMBackend.GenOpts:
 	copied.grammar = source.grammar
 	copied.json_schema = source.json_schema.duplicate(true)
 	copied.stop = source.stop.duplicate()
+	copied.external_context = source.external_context.duplicate(true)
 	return copied
 
 
