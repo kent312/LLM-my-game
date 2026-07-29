@@ -4,6 +4,19 @@ extends Control
 const SCENARIO_PATH: String = "res://game/data/scenarios/mist_bell/scenario.json"
 const PRESET_PATH: String = "res://game/data/characters/mist_bell_scout.json"
 const SAVE_SLOT: int = 0
+const DICE_SPIN_INTERVAL_SECONDS: float = 0.07
+const DICE_MIN_SPIN_SECONDS: float = 0.6
+
+
+class DiceReveal:
+	extends RefCounted
+
+	var result: Judgment.Result
+	var evidence: String
+
+	func _init(resolved_result: Judgment.Result, judgment_evidence: String) -> void:
+		result = resolved_result
+		evidence = judgment_evidence
 
 var _scenario: Scenario
 var _state: GameState
@@ -18,6 +31,14 @@ var _streaming_is_narration: bool = false
 var _busy: bool = false
 var _load_failed_closed: bool = false
 var _dice_tween: Tween
+var _dice_animation_rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _dice_spin_timer: Timer
+var _dice_reveal_timer: Timer
+var _dice_spin_started_msec: int = 0
+var _dice_spin_active: bool = false
+var _pending_dice_reveal: DiceReveal
+var _queued_dice_reveals: Array[DiceReveal] = []
+var _queued_dice_spins: int = 0
 
 var _log_label: RichTextLabel
 var _title_label: Label
@@ -41,6 +62,7 @@ var _fallback_waiting: bool = false
 
 
 func _ready() -> void:
+	_dice_animation_rng.randomize()
 	_build_interface()
 	if not _load_content():
 		return
@@ -196,6 +218,15 @@ func _build_interface() -> void:
 	_dice_label.add_theme_font_size_override("font_size", 22)
 	_dice_label.add_theme_color_override("font_color", Color("#d5b878"))
 	side_column.add_child(_dice_label)
+
+	_dice_spin_timer = Timer.new()
+	_dice_spin_timer.wait_time = DICE_SPIN_INTERVAL_SECONDS
+	_dice_spin_timer.timeout.connect(_on_dice_spin_tick)
+	add_child(_dice_spin_timer)
+	_dice_reveal_timer = Timer.new()
+	_dice_reveal_timer.one_shot = true
+	_dice_reveal_timer.timeout.connect(_reveal_pending_dice_result)
+	add_child(_dice_reveal_timer)
 
 	var spacer: Control = Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -439,7 +470,7 @@ func _on_new_game_pressed() -> void:
 		tr("新しいゲームを開始しました。"),
 		"#d5b878",
 	)
-	_dice_label.text = tr("待機中")
+	_reset_dice_display()
 	_set_input_enabled(true)
 	_refresh_all()
 
@@ -453,8 +484,7 @@ func _on_state_changed(_previous: int, current: int) -> void:
 	_state_label.text = tr("状態: %s") % _localized_state_name(current)
 	_skip_button.visible = current == TurnMachine.State.NARRATING
 	if current == TurnMachine.State.ROLLING:
-		_dice_label.text = tr("ダイスを振っています…")
-		_dice_label.add_theme_color_override("font_color", Color("#f2cf77"))
+		_request_dice_spin()
 	if current == TurnMachine.State.IDLE and not _streaming_text.is_empty():
 		_log_entries.append(
 			{
@@ -493,23 +523,139 @@ func _on_narration_finished(text: String) -> void:
 	_render_log()
 
 
-func _on_judgment_resolved(result: Judgment.Result) -> void:
-	var evidence: String = _judgment_evidence(result)
-	_log_entries.append(
-		{"speaker": tr("判定"), "text": evidence, "color": "#f2cf77"}
-	)
-	_dice_label.text = tr("出目 %s → %s") % [
-		str(result.dice),
-		_tier_label(result.tier),
-	]
-	_dice_label.add_theme_color_override("font_color", Color("#f2cf77"))
+func _request_dice_spin() -> void:
+	if _dice_spin_active or _is_dice_pulse_running():
+		_queued_dice_spins += 1
+		return
+	_begin_dice_spin()
+
+
+func _begin_dice_spin() -> void:
 	if _dice_tween != null and _dice_tween.is_valid():
 		_dice_tween.kill()
+	_dice_tween = null
+	_dice_label.scale = Vector2.ONE
+	_dice_label.add_theme_color_override("font_color", Color("#f2cf77"))
+	_dice_spin_started_msec = Time.get_ticks_msec()
+	_dice_spin_active = true
+	_update_dice_spin_digits()
+	_dice_spin_timer.start()
+
+
+func _on_dice_spin_tick() -> void:
+	if not _dice_spin_active:
+		return
+	_update_dice_spin_digits()
+
+
+func _update_dice_spin_digits() -> void:
+	var first_die: int = _dice_animation_rng.randi_range(1, 6)
+	var second_die: int = _dice_animation_rng.randi_range(1, 6)
+	_dice_label.text = tr("%d・%d") % [first_die, second_die]
+
+
+func _schedule_dice_reveal() -> void:
+	if not _dice_spin_active or _pending_dice_reveal == null:
+		return
+	var elapsed_seconds: float = (
+		float(Time.get_ticks_msec() - _dice_spin_started_msec) / 1000.0
+	)
+	var remaining_seconds: float = maxf(
+		DICE_MIN_SPIN_SECONDS - elapsed_seconds,
+		0.0,
+	)
+	if is_zero_approx(remaining_seconds):
+		_reveal_pending_dice_result()
+		return
+	_dice_reveal_timer.start(remaining_seconds)
+
+
+func _reveal_pending_dice_result() -> void:
+	if not _dice_spin_active or _pending_dice_reveal == null:
+		return
+	_dice_spin_timer.stop()
+	_dice_reveal_timer.stop()
+	var reveal: DiceReveal = _pending_dice_reveal
+	_pending_dice_reveal = null
+	_dice_spin_active = false
+	_dice_spin_started_msec = 0
+	_dice_label.text = tr("出目 %s → %s") % [
+		str(reveal.result.dice),
+		_tier_label(reveal.result.tier),
+	]
+	_dice_label.add_theme_color_override("font_color", Color("#f2cf77"))
+	_log_entries.append(
+		{"speaker": tr("判定"), "text": reveal.evidence, "color": "#f2cf77"}
+	)
 	_dice_label.scale = Vector2.ONE
 	_dice_tween = create_tween()
 	_dice_tween.tween_property(_dice_label, "scale", Vector2(1.12, 1.12), 0.12)
 	_dice_tween.tween_property(_dice_label, "scale", Vector2.ONE, 0.18)
+	_dice_tween.finished.connect(_on_dice_pulse_finished)
 	_render_log()
+
+
+func _on_dice_pulse_finished() -> void:
+	_dice_tween = null
+	_start_next_queued_dice_spin()
+
+
+func _start_next_queued_dice_spin() -> void:
+	if _dice_spin_active or _is_dice_pulse_running():
+		return
+	if _queued_dice_spins <= 0 and _queued_dice_reveals.is_empty():
+		return
+	if _queued_dice_spins > 0:
+		_queued_dice_spins -= 1
+	_begin_dice_spin()
+	if not _queued_dice_reveals.is_empty():
+		_pending_dice_reveal = _queued_dice_reveals.pop_front()
+		_schedule_dice_reveal()
+
+
+func _is_dice_pulse_running() -> bool:
+	return (
+		_dice_tween != null
+		and _dice_tween.is_valid()
+		and _dice_tween.is_running()
+	)
+
+
+func _cancel_dice_animation() -> void:
+	if _dice_spin_timer != null:
+		_dice_spin_timer.stop()
+	if _dice_reveal_timer != null:
+		_dice_reveal_timer.stop()
+	_dice_spin_active = false
+	_dice_spin_started_msec = 0
+	_pending_dice_reveal = null
+	_queued_dice_reveals.clear()
+	_queued_dice_spins = 0
+	if _dice_tween != null and _dice_tween.is_valid():
+		_dice_tween.kill()
+	_dice_tween = null
+	if _dice_label != null:
+		_dice_label.scale = Vector2.ONE
+
+
+func _reset_dice_display() -> void:
+	_cancel_dice_animation()
+	if _dice_label == null:
+		return
+	_dice_label.text = tr("待機中")
+	_dice_label.add_theme_color_override("font_color", Color("#d5b878"))
+
+
+func _on_judgment_resolved(result: Judgment.Result) -> void:
+	var reveal: DiceReveal = DiceReveal.new(result, _judgment_evidence(result))
+	if _dice_spin_active and _pending_dice_reveal == null:
+		_pending_dice_reveal = reveal
+		_schedule_dice_reveal()
+		return
+	_queued_dice_reveals.append(reveal)
+	_queued_dice_spins = maxi(_queued_dice_spins, _queued_dice_reveals.size())
+	if not _dice_spin_active and not _is_dice_pulse_running():
+		_start_next_queued_dice_spin()
 
 
 func _on_scenario_completed(xp: int, money: int) -> void:
@@ -524,6 +670,7 @@ func _on_scenario_completed(xp: int, money: int) -> void:
 
 
 func _on_turn_failed(message: String) -> void:
+	_reset_dice_display()
 	_log_entries.append(
 		{"speaker": tr("エラー"), "text": message, "color": "#e58b8b"}
 	)
@@ -843,5 +990,6 @@ func _append_log_entry(speaker: String, text: String, color: String) -> void:
 
 
 func _show_startup_error(message: String) -> void:
+	_reset_dice_display()
 	_append_log_entry(tr("起動エラー"), message, "#e58b8b")
 	_set_input_enabled(false)
