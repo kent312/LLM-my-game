@@ -13,10 +13,16 @@ class DiceReveal:
 
 	var result: Judgment.Result
 	var evidence: String
+	var outcome: String
 
-	func _init(resolved_result: Judgment.Result, judgment_evidence: String) -> void:
+	func _init(
+		resolved_result: Judgment.Result,
+		judgment_evidence: String,
+		judgment_outcome: String,
+	) -> void:
 		result = resolved_result
 		evidence = judgment_evidence
+		outcome = judgment_outcome
 
 var _scenario: Scenario
 var _state: GameState
@@ -392,7 +398,7 @@ func _connect_machine() -> void:
 	_machine.display_text_appended.connect(_on_display_text_appended)
 	_machine.narration_started.connect(_on_narration_started)
 	_machine.narration_finished.connect(_on_narration_finished)
-	_machine.judgment_resolved.connect(_on_judgment_resolved)
+	_machine.judgment_resolved.connect(_on_judgment_resolved, CONNECT_DEFERRED)
 	_machine.scenario_completed.connect(_on_scenario_completed)
 	_machine.turn_failed.connect(_on_turn_failed)
 
@@ -587,6 +593,10 @@ func _reveal_pending_dice_result() -> void:
 	_log_entries.append(
 		{"speaker": tr("判定"), "text": reveal.evidence, "color": "#f2cf77"}
 	)
+	if not reveal.outcome.is_empty():
+		_log_entries.append(
+			{"speaker": tr("結果"), "text": reveal.outcome, "color": "#d5b878"}
+		)
 	_dice_label.scale = Vector2.ONE
 	_dice_tween = create_tween()
 	_dice_tween.tween_property(_dice_label, "scale", Vector2(1.12, 1.12), 0.12)
@@ -647,7 +657,12 @@ func _reset_dice_display() -> void:
 
 
 func _on_judgment_resolved(result: Judgment.Result) -> void:
-	var reveal: DiceReveal = DiceReveal.new(result, _judgment_evidence(result))
+	var outcome: String = _judgment_outcome()
+	var reveal: DiceReveal = DiceReveal.new(
+		result,
+		_judgment_evidence(result),
+		outcome,
+	)
 	if _dice_spin_active and _pending_dice_reveal == null:
 		_pending_dice_reveal = reveal
 		_schedule_dice_reveal()
@@ -902,6 +917,67 @@ func _judgment_evidence(result: Judgment.Result) -> String:
 			_tier_label(result.tier),
 		]
 	)
+
+
+func _judgment_outcome() -> String:
+	if _machine.last_check_resolution != null:
+		var check_resolution: CheckResolver.CheckResolution = _machine.last_check_resolution
+		var parts: Array[String] = []
+		var trigger_hint: String = _check_trigger_hint(check_resolution.check_id)
+		if not trigger_hint.is_empty():
+			parts.append(tr("◆ %s") % trigger_hint)
+		var effects: String = _resolution_effects_text(
+			check_resolution.applied_effects,
+			check_resolution.no_state_change,
+		)
+		if not effects.is_empty():
+			parts.append(effects)
+		return "\n".join(parts)
+	if _machine.last_action_resolution != null:
+		var action_resolution: ActionResolver.ActionResolution = (
+			_machine.last_action_resolution
+		)
+		return _resolution_effects_text(
+			action_resolution.applied_effects,
+			action_resolution.no_state_change,
+		)
+	return ""
+
+
+func _resolution_effects_text(
+	applied_effects: Array[String],
+	no_state_change: bool,
+) -> String:
+	var lines: Array[String] = []
+	for effect: String in applied_effects:
+		lines.append(effect)
+	if lines.is_empty() and no_state_change:
+		lines.append(tr("状態変化なし"))
+	return "\n".join(lines)
+
+
+func _check_trigger_hint(check_id: String) -> String:
+	if _scenario == null or check_id.is_empty():
+		return ""
+	var scenes_value: Variant = _scenario.data.get("scenes", [])
+	if typeof(scenes_value) != TYPE_ARRAY:
+		return ""
+	var scenes: Array = scenes_value
+	for scene_value: Variant in scenes:
+		if typeof(scene_value) != TYPE_DICTIONARY:
+			continue
+		var scene: Dictionary = scene_value
+		var checks_value: Variant = scene.get("checks", [])
+		if typeof(checks_value) != TYPE_ARRAY:
+			continue
+		var checks: Array = checks_value
+		for check_value: Variant in checks:
+			if typeof(check_value) != TYPE_DICTIONARY:
+				continue
+			var check: Dictionary = check_value
+			if String(check.get("id", "")) == check_id:
+				return String(check.get("trigger_hint", ""))
+	return ""
 
 
 func _ability_id(ability: Types.Ability) -> String:
