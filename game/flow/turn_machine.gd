@@ -401,6 +401,8 @@ func _run_pending_narration(resumed: bool) -> bool:
 	var opts: LLMBackend.GenOpts = LLMBackend.GenOpts.new()
 	opts.max_tokens = NARRATION_MAX_TOKENS
 	opts.temperature = NARRATION_TEMPERATURE
+	opts.external_context = prompt_result.external_context.duplicate(true)
+	opts.external_context["player_input"] = _current_player_input
 	_narration_generation_in_progress = true
 	var output: Guardrails.OutputResult = await _guardrails.generate_filtered(
 		prompt_result.prompt,
