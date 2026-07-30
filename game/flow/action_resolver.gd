@@ -1,7 +1,5 @@
 class_name ActionResolver
 
-const ITEMS_PATH: String = "res://game/data/items.json"
-
 
 class ActionResolution:
 	var success: bool = false
@@ -23,15 +21,6 @@ class ActionResolution:
 			"no_state_change": no_state_change,
 			"disclosed_knows": disclosed_knows.duplicate(),
 		}
-
-
-class ItemsLoadResult:
-	var items: Dictionary[String, Dictionary] = {}
-	var errors: Array[String] = []
-
-
-	func is_success() -> bool:
-		return errors.is_empty()
 
 
 static func resolve(
@@ -75,7 +64,11 @@ static func _resolve_move(
 	if scene.is_empty():
 		_fail(resolution, "現在シーンが見つからないため移動を実行できません。")
 		return
-	var exit_data: Dictionary = _find_by_field(scene.get("exits", []), "goto", destination_id)
+	var exit_data: Dictionary = DataLookup.find_by_field(
+		scene.get("exits", []),
+		"goto",
+		destination_id,
+	)
 	if exit_data.is_empty():
 		_fail(resolution, "現在シーンに指定された出口がないため実行不可です。")
 		return
@@ -119,7 +112,7 @@ static func _resolve_item(
 	if _inventory_count(state, item_id) <= 0:
 		_fail(resolution, "アイテム「%s」を所持していないため実行不可です。" % item_id)
 		return
-	var load_result: ItemsLoadResult = _load_items(items_source, scenario)
+	var load_result: ItemRegistry.LoadResult = ItemRegistry.load(scenario, items_source)
 	if not load_result.is_success():
 		_fail(resolution, "アイテム定義を読み込めないため実行不可です: %s" % " / ".join(load_result.errors))
 		return
@@ -155,7 +148,7 @@ static func _resolve_talk(
 	if scene.is_empty():
 		_fail(resolution, "現在シーンが見つからないため会話を実行できません。")
 		return
-	var npc: Dictionary = _find_by_field(scene.get("npcs", []), "id", npc_id)
+	var npc: Dictionary = DataLookup.find_by_field(scene.get("npcs", []), "id", npc_id)
 	if npc.is_empty():
 		_fail(resolution, "NPC「%s」が現在シーンにいないため実行不可です。" % npc_id)
 		return
@@ -179,97 +172,12 @@ static func _resolve_talk(
 		resolution.applied_effects.append("NPC knows 開示: %s" % str(resolution.disclosed_knows))
 
 
-static func _load_items(source: Variant, scenario: Scenario) -> ItemsLoadResult:
-	var result: ItemsLoadResult = ItemsLoadResult.new()
-	var resolved_source: Variant = source
-	if resolved_source == null:
-		var file: FileAccess = FileAccess.open(ITEMS_PATH, FileAccess.READ)
-		if file == null:
-			result.errors.append(
-				"アイテムデータを開けません: %s（%s）"
-				% [ITEMS_PATH, error_string(FileAccess.get_open_error())]
-			)
-			return result
-		resolved_source = file.get_as_text()
-	var parsed: Variant = _parse_items_source(resolved_source, result.errors)
-	if not result.errors.is_empty():
-		return result
-	var entries: Array = []
-	if typeof(parsed) == TYPE_ARRAY:
-		entries = parsed
-	elif typeof(parsed) == TYPE_DICTIONARY:
-		var root: Dictionary = parsed
-		if root.has("items") and typeof(root["items"]) == TYPE_ARRAY:
-			entries = root["items"]
-		else:
-			result.errors.append("アイテムデータのルートには items 配列が必要です。")
-			return result
-	else:
-		result.errors.append("アイテムデータのルートは配列またはJSONオブジェクトである必要があります。")
-		return result
-
-	for index: int in range(entries.size()):
-		var path: String = "items[%d]" % index
-		var value: Variant = entries[index]
-		if typeof(value) != TYPE_DICTIONARY:
-			result.errors.append("%s: JSONオブジェクトである必要があります。" % path)
-			continue
-		var item: Dictionary = value
-		if not _has_non_empty_string(item, "id"):
-			result.errors.append("%s.id: 空でない文字列が必要です。" % path)
-			continue
-		var item_id: String = String(item["id"])
-		if result.items.has(item_id):
-			result.errors.append("%s.id: アイテムIDが重複しています: %s" % [path, item_id])
-			continue
-		if not _has_non_empty_string(item, "name_ja"):
-			result.errors.append("%s.name_ja: 空でない文字列が必要です。" % path)
-			continue
-		if item.has("effect"):
-			if typeof(item["effect"]) != TYPE_DICTIONARY:
-				result.errors.append("%s.effect: JSONオブジェクトである必要があります。" % path)
-				continue
-			var effect: Dictionary = item["effect"]
-			var validation_state: GameState = GameState.new()
-			var effect_errors: Array[String] = scenario.apply_effect(effect, validation_state)
-			for effect_error: String in effect_errors:
-				result.errors.append("%s.%s" % [path, effect_error])
-		result.items[item_id] = item.duplicate(true)
-	return result
-
-
-static func _parse_items_source(source: Variant, errors: Array[String]) -> Variant:
-	if typeof(source) in [TYPE_DICTIONARY, TYPE_ARRAY]:
-		return source.duplicate(true)
-	if typeof(source) != TYPE_STRING:
-		errors.append("アイテムデータはJSON文字列、Dictionary、Array のいずれかである必要があります。")
-		return null
-	var json: JSON = JSON.new()
-	var parse_error: Error = json.parse(String(source))
-	if parse_error != OK:
-		errors.append(
-			"アイテムデータのJSON解析に失敗しました（行%d）: %s"
-			% [json.get_error_line(), json.get_error_message()]
-		)
-		return null
-	return json.data
-
-
 static func _find_current_scene(state: GameState, scenario: Scenario) -> Dictionary:
-	return _find_by_field(scenario.data.get("scenes", []), "id", state.scene_id)
-
-
-static func _find_by_field(values_value: Variant, field: String, expected: String) -> Dictionary:
-	if typeof(values_value) != TYPE_ARRAY:
-		return {}
-	var values: Array = values_value
-	for value: Variant in values:
-		if typeof(value) != TYPE_DICTIONARY:
-			continue
-		var entry: Dictionary = value
-		if String(entry.get(field, "")) == expected:
-			return entry
-	return {}
+	return DataLookup.find_by_field(
+		scenario.data.get("scenes", []),
+		"id",
+		state.scene_id,
+	)
 
 
 static func _target_id(target: String, prefix: String) -> String:
@@ -296,10 +204,6 @@ static func _consume_one(state: GameState, item_id: String) -> void:
 		else:
 			state.character.inventory.remove_at(index)
 		return
-
-
-static func _has_non_empty_string(data: Dictionary, key: String) -> bool:
-	return data.has(key) and typeof(data[key]) == TYPE_STRING and not String(data[key]).is_empty()
 
 
 static func _fail(resolution: ActionResolution, reason: String) -> void:

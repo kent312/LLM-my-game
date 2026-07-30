@@ -41,6 +41,7 @@ var last_judgment_request: Judgment.Request = null
 var last_judgment: Judgment.Result = null
 var last_action_resolution: ActionResolver.ActionResolution = null
 var last_check_resolution: CheckResolver.CheckResolution = null
+var last_combat_resolution: Combat.Resolution = null
 
 var _backend: LLMBackend
 var _state: GameState
@@ -59,6 +60,7 @@ var _narration_generation_in_progress: bool = false
 var _narration_history_start_index: int = 0
 var _pending_narration_saved: bool = false
 var _current_player_input: String = ""
+var _combat_items_source: Variant = null
 
 
 func _init(
@@ -68,6 +70,7 @@ func _init(
 	save_manager: SaveManager,
 	slot: int = 0,
 	rng: RandomNumberGenerator = null,
+	combat_items_source: Variant = null,
 ) -> void:
 	_backend = backend
 	_state = game_state
@@ -75,6 +78,7 @@ func _init(
 	_save_manager = save_manager
 	_slot = slot
 	_rng = rng if rng != null else RandomNumberGenerator.new()
+	_combat_items_source = combat_items_source
 	rolling_summary = _state.rolling_summary
 	recent_logs = _state.recent_logs.duplicate()
 
@@ -108,6 +112,7 @@ func submit_input(player_input: String, scene_summary: String = "") -> bool:
 	last_judgment = null
 	last_action_resolution = null
 	last_check_resolution = null
+	last_combat_resolution = null
 	_current_player_input = player_input
 	_transition_to(State.INPUT_RECEIVED)
 	_transition_to(State.INPUT_FILTERING)
@@ -289,9 +294,22 @@ func _commit_rolled_action(
 			_rng,
 		)
 		return _confirmed_check_result(intent, judgment_result, last_check_resolution)
+	if intent.action_type == "attack":
+		last_combat_resolution = Combat.resolve(
+			intent.to_dict(),
+			judgment_result,
+			_state,
+			_scenario,
+			_rng,
+			_combat_items_source,
+		)
+		return _confirmed_combat_result(
+			intent,
+			judgment_result,
+			last_combat_resolution,
+		)
 
-	# combat.gdはPR-16の責務である。PR-12では判定根拠を確定・保存し、
-	# check:<id>以外の宣言的効果を推測して適用しない。
+	# check/attack 以外の判定は、宣言的効果を推測して適用しない。
 	var confirmed: Dictionary[String, Variant] = _judgment_to_dict(judgment_result)
 	confirmed["action_summary"] = intent.summary_ja
 	confirmed["action_type"] = intent.action_type
@@ -299,6 +317,36 @@ func _commit_rolled_action(
 	confirmed["resolution_reason"] = tr("判定結果を確定しました。")
 	confirmed["no_state_change"] = true
 	confirmed["effects"] = tr("状態変更なし")
+	return confirmed
+
+
+func _confirmed_combat_result(
+	intent: IntentClassifier.Result,
+	judgment_result: Judgment.Result,
+	resolution: Combat.Resolution,
+) -> Dictionary[String, Variant]:
+	var confirmed: Dictionary[String, Variant] = _judgment_to_dict(judgment_result)
+	var resolution_data: Dictionary[String, Variant] = resolution.to_dict()
+	confirmed["action_summary"] = intent.summary_ja
+	confirmed["action_type"] = intent.action_type
+	confirmed["target"] = intent.target
+	confirmed["resolution"] = resolution_data
+	confirmed["applied_effects"] = resolution_data["applied_effects"]
+	confirmed["weapon"] = {
+		"id": resolution.weapon_id,
+		"name_ja": resolution.weapon_name_ja,
+		"damage": resolution.weapon_damage,
+	}
+	confirmed["damage_dealt"] = resolution.damage_dealt
+	confirmed["damage_taken"] = resolution.damage_taken
+	confirmed["combat_branch"] = resolution.branch
+	confirmed["complication"] = resolution.complication_id
+	confirmed["effects"] = _combat_effects_summary(resolution)
+	if not resolution.success:
+		confirmed["action_summary"] = _unavailable_action_summary(
+			intent.summary_ja,
+			resolution.reason,
+		)
 	return confirmed
 
 
@@ -769,6 +817,17 @@ func _check_effects_summary(
 	if resolution.applied_effects.is_empty():
 		return tr("%s: 効果なし") % prefix
 	return "%s: %s" % [prefix, " / ".join(resolution.applied_effects)]
+
+
+func _combat_effects_summary(resolution: Combat.Resolution) -> String:
+	if not resolution.success:
+		return tr("実行不可: %s") % resolution.reason
+	if resolution.applied_effects.is_empty():
+		return tr("%s: 効果なし") % resolution.branch
+	return "%s: %s" % [
+		resolution.branch,
+		" / ".join(resolution.applied_effects),
+	]
 
 
 func _grant_completion_rewards() -> Dictionary[String, Variant]:

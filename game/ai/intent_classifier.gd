@@ -568,6 +568,9 @@ func _validate_response(
 	normalized["skill_tags"] = normalized_tags
 	if String(normalized["action_type"]) == "other":
 		normalized["needs_roll"] = false
+	if String(normalized["action_type"]) == "attack":
+		# 軽量戦闘は必ずPCの判定結果を入力に解決する。AIが判定を省略できないよう固定する。
+		normalized["needs_roll"] = true
 	result.intent = normalized
 
 	var target_value: Variant = normalized["target"]

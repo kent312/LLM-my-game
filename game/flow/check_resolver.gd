@@ -44,11 +44,19 @@ static func resolve(
 		_fail(resolution, "check ID が空のためシナリオ効果を適用できません。")
 		return resolution
 
-	var scene: Dictionary = _find_by_field(scenario.data.get("scenes", []), "id", state.scene_id)
+	var scene: Dictionary = DataLookup.find_by_field(
+		scenario.data.get("scenes", []),
+		"id",
+		state.scene_id,
+	)
 	if scene.is_empty():
 		_fail(resolution, "現在シーンが見つからないため判定効果を適用できません。")
 		return resolution
-	var check: Dictionary = _find_by_field(scene.get("checks", []), "id", resolution.check_id)
+	var check: Dictionary = DataLookup.find_by_field(
+		scene.get("checks", []),
+		"id",
+		resolution.check_id,
+	)
 	if check.is_empty():
 		_fail(resolution, "現在シーンに check「%s」がないため効果を適用できません。" % resolution.check_id)
 		return resolution
@@ -140,7 +148,11 @@ static func _select_complication(
 		return {}
 	var complications: Array = complications_value
 	if branch_effect.has("complication"):
-		return _find_by_field(complications, "id", String(branch_effect["complication"]))
+		return DataLookup.find_by_field(
+			complications,
+			"id",
+			String(branch_effect["complication"]),
+		)
 	if complications.is_empty():
 		return {}
 	var selected_index: int = rng.randi_range(0, complications.size() - 1)
@@ -163,19 +175,6 @@ static func _validate_effects(
 	if not complication_effect.is_empty():
 		errors.append_array(scenario.apply_effect(complication_effect, validation_state))
 	return errors
-
-
-static func _find_by_field(values_value: Variant, field: String, expected: String) -> Dictionary:
-	if typeof(values_value) != TYPE_ARRAY:
-		return {}
-	var values: Array = values_value
-	for value: Variant in values:
-		if typeof(value) != TYPE_DICTIONARY:
-			continue
-		var entry: Dictionary = value
-		if String(entry.get(field, "")) == expected:
-			return entry
-	return {}
 
 
 static func _fail(resolution: CheckResolution, reason: String) -> void:

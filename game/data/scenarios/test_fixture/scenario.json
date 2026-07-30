@@ -38,6 +38,11 @@
 					"id": "torch_lost",
 					"effect": {"remove_item": "torch"},
 					"hint_ja": "松明を落とす"
+				},
+				{
+					"id": "noise",
+					"effect": {"set_flags": {"alerted": true}},
+					"hint_ja": "物音で警戒される"
 				}
 			],
 			"exits": [
