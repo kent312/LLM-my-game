@@ -142,6 +142,19 @@ func test_scene_enemy_and_enemies_ref_must_exist_in_enemy_master() -> void:
 	assert_true(_contains_error(ref_result.errors, "enemies.json に存在しない敵ID"))
 
 
+func test_scene_enemy_ids_must_not_be_duplicated() -> void:
+	var data: Dictionary = _fixture_data()
+	var scenes: Array = data["scenes"]
+	var first_scene: Dictionary = scenes[0]
+	var scene_enemies: Array = first_scene["enemies"]
+	scene_enemies.append("goblin")
+
+	var result: Scenario.LoadResult = Scenario.load(data)
+
+	assert_true(_contains_error(result.errors, "敵IDが重複"))
+	assert_true(_contains_error(result.errors, "scenes[0].enemies[1]"))
+
+
 func test_flag_and_clock_conditions_are_evaluated() -> void:
 	var state: GameState = _state()
 	state.flags["door_open"] = true

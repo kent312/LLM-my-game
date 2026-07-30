@@ -12,6 +12,16 @@
 		{
 			"id": "moon_key",
 			"name_ja": "銀の月鍵"
+		},
+		{
+			"id": "shortbow",
+			"name_ja": "短弓",
+			"damage": 2
+		},
+		{
+			"id": "short_sword",
+			"name_ja": "短剣",
+			"damage": 3
 		}
 	]
 }

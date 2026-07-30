@@ -12,6 +12,7 @@ const EFFECT_NAMES: Array[String] = [
 ]
 
 var data: Dictionary = {}
+var enemy_definitions: Dictionary[String, Dictionary] = {}
 
 
 class LoadResult:
@@ -62,6 +63,7 @@ static func load(source: Variant, enemies_source: Variant = null) -> LoadResult:
 	var loaded: Scenario = Scenario.new()
 	var root: Dictionary = scenario_data
 	loaded.data = root.duplicate(true)
+	loaded.enemy_definitions = _build_enemy_definitions(enemies_data)
 	return LoadResult.new(loaded, errors)
 
 
@@ -78,6 +80,52 @@ func serialize() -> Dictionary:
 	return data.duplicate(true)
 
 
+func enter_scene(scene_id: String, state: GameState) -> Array[String]:
+	var errors: Array[String] = []
+	var scene: Dictionary = DataLookup.find_by_field(
+		data.get("scenes", []),
+		"id",
+		scene_id,
+	)
+	if scene.is_empty():
+		errors.append("シーン進入先が見つかりません: %s" % scene_id)
+		return errors
+
+	var expanded_enemies: Array[Dictionary] = []
+	var enemy_ids_value: Variant = scene.get("enemies", [])
+	if typeof(enemy_ids_value) != TYPE_ARRAY:
+		errors.append("シーン「%s」の enemies は配列である必要があります。" % scene_id)
+		return errors
+	var enemy_ids: Array = enemy_ids_value
+	for enemy_id_value: Variant in enemy_ids:
+		if typeof(enemy_id_value) != TYPE_STRING:
+			errors.append("シーン「%s」の敵IDは文字列である必要があります。" % scene_id)
+			continue
+		var enemy_id: String = String(enemy_id_value)
+		if not enemy_definitions.has(enemy_id):
+			errors.append("敵データに存在しない敵IDです: %s" % enemy_id)
+			continue
+		var definition: Dictionary = enemy_definitions[enemy_id]
+		var maximum_hp: int = int(definition["hp"])
+		expanded_enemies.append(
+			{
+				"enemy_id": enemy_id,
+				"hp": {"current": maximum_hp, "max": maximum_hp},
+			}
+		)
+	if not errors.is_empty():
+		return errors
+	state.scene_id = scene_id
+	state.active_enemies = expanded_enemies
+	return errors
+
+
+func enemy_definition(enemy_id: String) -> Dictionary:
+	if not enemy_definitions.has(enemy_id):
+		return {}
+	return enemy_definitions[enemy_id].duplicate(true)
+
+
 func apply_effect(effect: Dictionary, state: GameState) -> Array[String]:
 	var errors: Array[String] = []
 	var scene_ids: Dictionary[String, bool] = _collect_scene_ids(data, errors)
@@ -85,6 +133,7 @@ func apply_effect(effect: Dictionary, state: GameState) -> Array[String]:
 	if not errors.is_empty():
 		return errors
 
+	var hp_before_effect: int = int(state.character.hp["current"])
 	# 検証後に閉じた語彙だけを適用する。動的呼び出しや式評価は行わない（ARCH-3）。
 	for effect_name: String in EFFECT_NAMES:
 		if not effect.has(effect_name):
@@ -110,10 +159,31 @@ func apply_effect(effect: Dictionary, state: GameState) -> Array[String]:
 			"advance_clock":
 				state.clock += int(effect_value)
 			"goto":
-				state.scene_id = String(effect_value)
+				errors.append_array(enter_scene(String(effect_value), state))
 			_:
 				# EFFECT_NAMES と match の不整合はプログラム不変条件違反として停止する。
 				assert(false, "effect 適用器に未実装の語彙があります: %s" % effect_name)
+	if (
+		effect.has("damage")
+		and hp_before_effect > 0
+		and int(state.character.hp["current"]) == 0
+		and not bool(state.flags.get("incapacitated", false))
+	):
+		errors.append_array(_apply_on_defeat(state))
+	return errors
+
+
+func _apply_on_defeat(state: GameState) -> Array[String]:
+	var errors: Array[String] = []
+	var on_defeat_value: Variant = data.get("on_defeat", {})
+	if typeof(on_defeat_value) != TYPE_DICTIONARY:
+		errors.append("on_defeat: JSONオブジェクトである必要があります。")
+		return errors
+	var on_defeat: Dictionary = on_defeat_value
+	errors.append_array(apply_effect(on_defeat, state))
+	if errors.is_empty():
+		# on_defeat 内の set_flags が同名を含んでも、行動不能の確定を最後に保証する。
+		_apply_set_flags({"incapacitated": true}, state)
 	return errors
 
 
@@ -211,7 +281,13 @@ static func _validate_scene(
 	_validate_complications(scene, path, scene_ids, errors)
 	_validate_exits(scene, path, scene_ids, errors)
 	if scene.has("enemies"):
-		_validate_enemy_references(scene["enemies"], "%s.enemies" % path, enemy_ids, errors)
+		_validate_enemy_references(
+			scene["enemies"],
+			"%s.enemies" % path,
+			enemy_ids,
+			errors,
+			true,
+		)
 
 
 static func _validate_checks(
@@ -411,22 +487,44 @@ static func _validate_enemies(enemies_data: Variant, errors: Array[String]) -> D
 	return enemy_ids
 
 
+static func _build_enemy_definitions(
+	enemies_data: Variant,
+) -> Dictionary[String, Dictionary]:
+	var definitions: Dictionary[String, Dictionary] = {}
+	var entries: Array = []
+	if typeof(enemies_data) == TYPE_ARRAY:
+		entries = enemies_data
+	elif typeof(enemies_data) == TYPE_DICTIONARY:
+		var root: Dictionary = enemies_data
+		entries = root.get("enemies", [])
+	for value: Variant in entries:
+		var enemy: Dictionary = value
+		definitions[String(enemy["id"])] = enemy.duplicate(true)
+	return definitions
+
+
 static func _validate_enemy_references(
 	value: Variant,
 	path: String,
 	enemy_ids: Dictionary[String, bool],
 	errors: Array[String],
+	reject_duplicates: bool = false,
 ) -> void:
 	if typeof(value) != TYPE_ARRAY:
 		errors.append("%s: 配列である必要があります。" % path)
 		return
 	var references: Array = value
+	var seen: Dictionary[String, bool] = {}
 	for index: int in range(references.size()):
 		var enemy_value: Variant = references[index]
 		if typeof(enemy_value) != TYPE_STRING:
 			errors.append("%s[%d]: 敵IDは文字列である必要があります。" % [path, index])
 			continue
 		var enemy_id: String = enemy_value
+		if reject_duplicates and seen.has(enemy_id):
+			errors.append("%s[%d]: 敵IDが重複しています: %s" % [path, index, enemy_id])
+			continue
+		seen[enemy_id] = true
 		if not enemy_ids.has(enemy_id):
 			errors.append("%s[%d]: enemies.json に存在しない敵IDです: %s" % [path, index, enemy_id])
 

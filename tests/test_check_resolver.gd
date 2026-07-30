@@ -42,9 +42,9 @@ func test_partial_without_explicit_id_draws_scene_complication_with_seeded_rng()
 	var complications: Array = entrance["complications"]
 	complications.append(
 		{
-			"id": "noise",
-			"effect": {"set_flags": {"alerted": true}},
-			"hint_ja": "物音で警戒される",
+			"id": "falling_stone",
+			"effect": {"set_flags": {"stone_fell": true}},
+			"hint_ja": "落石が道を塞ぐ",
 		}
 	)
 	var scenario_result: Scenario.LoadResult = Scenario.load(data)
@@ -64,11 +64,13 @@ func test_partial_without_explicit_id_draws_scene_complication_with_seeded_rng()
 	)
 
 	assert_true(resolution.success)
-	assert_true(["torch_lost", "noise"].has(resolution.complication_id))
+	assert_true(["torch_lost", "noise", "falling_stone"].has(resolution.complication_id))
 	if resolution.complication_id == "torch_lost":
 		assert_eq(_item_count(state, "torch"), 0)
-	else:
+	elif resolution.complication_id == "noise":
 		assert_eq(state.flags["alerted"], true)
+	else:
+		assert_eq(state.flags["stone_fell"], true)
 
 
 func test_failure_and_fumble_apply_on_failure() -> void:
@@ -144,6 +146,24 @@ func test_resolution_records_check_id_branch_and_applied_effects() -> void:
 	assert_false(resolution.reason.is_empty())
 
 
+func test_damage_to_zero_applies_incapacitation_and_on_defeat() -> void:
+	var scenario: Scenario = _fixture()
+	var state: GameState = _state()
+	state.character.hp = {"current": 1, "max": 8}
+
+	var resolution: CheckResolver.CheckResolution = _resolve(
+		scenario,
+		state,
+		Types.ResultTier.FAILURE,
+	)
+
+	assert_true(resolution.success)
+	assert_eq(state.character.hp["current"], 0)
+	assert_eq(state.flags.get("incapacitated"), true)
+	assert_eq(state.scene_id, "rescue")
+	assert_eq(state.active_enemies.size(), 0)
+
+
 func _resolve(
 	scenario: Scenario,
 	state: GameState,
@@ -193,4 +213,3 @@ func _item_count(state: GameState, item_id: String) -> int:
 		if String(item.get("item_id", "")) == item_id:
 			return int(item.get("count", 0))
 	return 0
-

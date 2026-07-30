@@ -388,7 +388,15 @@ func _create_fresh_state() -> GameState:
 	var state: GameState = GameState.new()
 	state.character = character_result.sheet
 	state.scenario_id = String(_scenario.data.get("id", ""))
-	state.scene_id = String(first_scene.get("id", ""))
+	var scene_errors: Array[String] = _scenario.enter_scene(
+		String(first_scene.get("id", "")),
+		state,
+	)
+	if not scene_errors.is_empty():
+		_show_startup_error(
+			tr("開始シーンへ進入できませんでした: %s") % " / ".join(scene_errors)
+		)
+		return null
 	return state
 
 
@@ -920,6 +928,25 @@ func _judgment_evidence(result: Judgment.Result) -> String:
 
 
 func _judgment_outcome() -> String:
+	if _machine.last_combat_resolution != null:
+		var combat_resolution: Combat.Resolution = _machine.last_combat_resolution
+		var combat_parts: Array[String] = [
+			tr("採用武器: %s（武器ダメージ: %d）") % [
+				combat_resolution.weapon_name_ja,
+				combat_resolution.weapon_damage,
+			],
+			tr("戦闘分岐: %s / 与ダメージ: %d") % [
+				combat_resolution.branch,
+				combat_resolution.damage_dealt,
+			],
+		]
+		var combat_effects: String = _resolution_effects_text(
+			combat_resolution.applied_effects,
+			combat_resolution.no_state_change,
+		)
+		if not combat_effects.is_empty():
+			combat_parts.append(combat_effects)
+		return "\n".join(combat_parts)
 	if _machine.last_check_resolution != null:
 		var check_resolution: CheckResolver.CheckResolution = _machine.last_check_resolution
 		var parts: Array[String] = []

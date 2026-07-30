@@ -383,6 +383,38 @@ func test_12_attack_with_wis_retries_once_then_falls_back() -> void:
 	assert_true(_contains_fragment(result.validation_errors, "STRまたはDEX"))
 
 
+func test_12b_attack_forces_needs_roll_true() -> void:
+	var state: GameState = _state()
+	state.active_enemies = [
+		{"enemy_id": "goblin", "hp": {"current": 4, "max": 4}},
+	]
+	_backend.set_responses(
+		[
+			_intent_json(
+				"attack",
+				"STR",
+				["skill.tactics"],
+				"enemy:goblin",
+				"normal",
+				false,
+				"ゴブリンを攻撃する",
+			),
+		]
+	)
+
+	var result: IntentClassifier.Result = await _classifier.classify(
+		"ゴブリンを攻撃する",
+		"洞窟の入口",
+		state,
+		_fixture(),
+	)
+
+	assert_true(result.executable)
+	assert_eq(result.action_type, "attack")
+	assert_true(result.needs_roll)
+	assert_eq(_classifier.prompt_history.size(), 1)
+
+
 func test_13_check_target_retry_with_broken_json_still_becomes_free_check() -> void:
 	_backend.set_responses(
 		[
