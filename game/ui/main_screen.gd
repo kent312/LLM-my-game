@@ -33,9 +33,14 @@ var _backend: LLMBackend
 var _machine: TurnMachine
 var _item_names: Dictionary[String, String] = {}
 var _log_entries: Array[Dictionary] = []
+var _formatted_log_entries: Array[String] = []
+var _formatted_log_text: String = ""
+var _known_terms_source: Array[String] = []
+var _normalized_known_terms: Array[String] = []
 var _streaming_text: String = ""
 var _streaming_is_narration: bool = false
 var _busy: bool = false
+var _input_enabled: bool = false
 var _load_failed_closed: bool = false
 var _dice_tween: Tween
 var _dice_animation_rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -549,6 +554,7 @@ func _on_new_game_pressed() -> void:
 	_state = fresh_state
 	_install_machine()
 	_log_entries.clear()
+	_reset_formatted_log_cache()
 	_streaming_text = ""
 	_streaming_is_narration = false
 	_append_log_entry(
@@ -867,8 +873,8 @@ func _apply_settings_when_machine_idle(previous_machine: TurnMachine) -> void:
 
 
 func _refresh_all() -> void:
-	_render_log()
 	_refresh_status_and_quest()
+	_render_log()
 	var has_pending: bool = typeof(_state.pending_narration) == TYPE_DICTIONARY
 	var cleared: bool = bool(_state.flags.get("scenario_cleared", false))
 	_resume_button.visible = has_pending
@@ -879,8 +885,9 @@ func _refresh_all() -> void:
 func _refresh_status_and_quest() -> void:
 	if _state == null:
 		return
-	_status_label.text = UIFormat.format_status(_state)
+	_status_label.text = UIFormat.format_status(_state, _item_names)
 	var scene: Dictionary = _current_scene()
+	_refresh_known_terms_cache()
 	_scene_label.text = tr("第%dターン") % (_state.turn_count + 1)
 	_location_label.text = _scene_location_name(scene)
 	if bool(_state.flags.get("scenario_cleared", false)):
@@ -892,21 +899,8 @@ func _refresh_status_and_quest() -> void:
 
 
 func _render_log() -> void:
-	var output: String = ""
-	var known_terms: Array[String] = _known_terms()
-	for entry: Dictionary in _log_entries:
-		if entry.has("bbcode"):
-			output += String(entry["bbcode"]) + "\n\n"
-			continue
-		var kind: UIFormat.TextKind = int(
-			entry.get("kind", UIFormat.TextKind.SYSTEM)
-		)
-		output += UIFormat.format_log_entry(
-			kind,
-			String(entry.get("speaker", "")),
-			String(entry.get("text", "")),
-			known_terms,
-		) + "\n\n"
+	_sync_formatted_log_cache()
+	var output: String = _formatted_log_text
 	if not _streaming_text.is_empty():
 		var streaming_speaker: String = tr("GM") if _streaming_is_narration else tr("システム")
 		var streaming_kind: UIFormat.TextKind = (
@@ -918,10 +912,39 @@ func _render_log() -> void:
 			streaming_kind,
 			streaming_speaker,
 			_streaming_text,
-			known_terms,
+			_normalized_known_terms,
 		) + "[color=#79899e]▌[/color]"
 	_log_label.text = output
 	call_deferred("_scroll_log_to_bottom")
+
+
+func _sync_formatted_log_cache() -> void:
+	if _formatted_log_entries.size() > _log_entries.size():
+		_reset_formatted_log_cache()
+	while _formatted_log_entries.size() < _log_entries.size():
+		var entry: Dictionary = _log_entries[_formatted_log_entries.size()]
+		var formatted_entry: String = ""
+		if entry.has("bbcode"):
+			# 生BBCodeを許す唯一の経路。判定カードなどコード生成文字列だけを投入する。
+			# AI出力やプレイヤー入力を入れるとエスケープを迂回し INV-3 違反になる。
+			formatted_entry = String(entry["bbcode"])
+		else:
+			var kind: UIFormat.TextKind = int(
+				entry.get("kind", UIFormat.TextKind.SYSTEM)
+			)
+			formatted_entry = UIFormat.format_log_entry(
+				kind,
+				String(entry.get("speaker", "")),
+				String(entry.get("text", "")),
+				_normalized_known_terms,
+			)
+		_formatted_log_entries.append(formatted_entry)
+		_formatted_log_text += formatted_entry + "\n\n"
+
+
+func _reset_formatted_log_cache() -> void:
+	_formatted_log_entries.clear()
+	_formatted_log_text = ""
 
 
 func _scroll_log_to_bottom() -> void:
@@ -933,14 +956,15 @@ func _set_input_enabled(enabled: bool) -> void:
 	var cleared: bool = (
 		_state != null and bool(_state.flags.get("scenario_cleared", false))
 	)
-	_input_line.editable = enabled and not cleared
-	_submit_button.disabled = not enabled or cleared
+	_input_enabled = enabled and not cleared
+	_input_line.editable = _input_enabled
+	_submit_button.disabled = not _input_enabled
 	_new_game_button.disabled = not enabled
 	if _suggestions_container != null:
 		for child: Node in _suggestions_container.get_children():
 			if child is Button:
 				var suggestion_button: Button = child
-				suggestion_button.disabled = not enabled or cleared
+				suggestion_button.disabled = not _input_enabled
 	if _input_line.editable:
 		_input_line.grab_focus()
 
@@ -962,26 +986,10 @@ func _current_scene() -> Dictionary:
 
 
 func _scene_location_name(scene: Dictionary) -> String:
-	var configured_name: String = String(scene.get("name_ja", ""))
-	if not configured_name.is_empty():
-		return configured_name
-	var scene_id: String = _state.scene_id if _state != null else ""
-	match scene_id:
-		"fog_gate":
-			return tr("霧門")
-		"sunken_archive":
-			return tr("水没書庫")
-		"observatory":
-			return tr("星見鏡の観測所")
-		"dawn_sanctum":
-			return tr("夜明けの聖堂")
-		"rescue":
-			return tr("霧鐘の村")
-		_:
-			return scene_id
+	return String(scene.get("name_ja", tr("場所名不明")))
 
 
-func _known_terms() -> Array[String]:
+func _collect_known_terms() -> Array[String]:
 	if _state == null:
 		return []
 	var terms: Array[String] = []
@@ -1005,6 +1013,14 @@ func _known_terms() -> Array[String]:
 		if not item_name.is_empty():
 			terms.append(item_name)
 	return terms
+
+
+func _refresh_known_terms_cache() -> void:
+	var terms: Array[String] = _collect_known_terms()
+	if terms == _known_terms_source:
+		return
+	_known_terms_source = terms.duplicate()
+	_normalized_known_terms = UIFormat.normalize_known_terms(terms)
 
 
 func _refresh_suggestions(scene: Dictionary) -> void:
@@ -1035,13 +1051,13 @@ func _refresh_suggestions(scene: Dictionary) -> void:
 	for suggestion: String in suggestions:
 		var button: Button = Button.new()
 		button.text = suggestion
-		button.disabled = _busy
+		button.disabled = not _input_enabled
 		button.pressed.connect(_on_suggestion_pressed.bind(suggestion))
 		_suggestions_container.add_child(button)
 
 
 func _on_suggestion_pressed(suggestion: String) -> void:
-	if _busy:
+	if not _input_enabled:
 		return
 	_input_line.text = suggestion
 	_input_line.caret_column = suggestion.length()
@@ -1188,19 +1204,7 @@ func _ability_id(ability: Types.Ability) -> String:
 
 
 func _tier_label(tier: Types.ResultTier) -> String:
-	match tier:
-		Types.ResultTier.FUMBLE:
-			return tr("ファンブル")
-		Types.ResultTier.FAILURE:
-			return tr("失敗")
-		Types.ResultTier.PARTIAL:
-			return tr("部分成功")
-		Types.ResultTier.SUCCESS:
-			return tr("成功")
-		Types.ResultTier.CRITICAL:
-			return tr("クリティカル")
-		_:
-			return tr("不明")
+	return UIFormat.tier_label(tier)
 
 
 func _localized_state_name(state_value: int) -> String:

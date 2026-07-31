@@ -6,6 +6,7 @@
 	"scenes": [
 		{
 			"id": "fog_gate",
+			"name_ja": "霧門",
 			"goal_ja": "霧門の刻印を読み、沈んだ書庫への道を開く",
 			"mood_tags": ["village", "fog", "mystery"],
 			"npcs": [
@@ -54,6 +55,7 @@
 		},
 		{
 			"id": "sunken_archive",
+			"name_ja": "水没書庫",
 			"goal_ja": "水没書庫から星見鏡を起動する月鍵を回収する",
 			"mood_tags": ["archive", "water", "echo"],
 			"checks": [
@@ -95,6 +97,7 @@
 		},
 		{
 			"id": "observatory",
+			"name_ja": "星見鏡の観測所",
 			"goal_ja": "月鍵で星見鏡を動かし、夜明けの光路を作る",
 			"mood_tags": ["observatory", "stars", "machinery"],
 			"checks": [
@@ -135,6 +138,7 @@
 		},
 		{
 			"id": "dawn_sanctum",
+			"name_ja": "夜明けの聖堂",
 			"goal_ja": "霧の残響を鎮め、霧鐘に夜明けを取り戻す",
 			"mood_tags": ["sanctum", "dawn", "hope"],
 			"npcs": [
@@ -178,6 +182,7 @@
 		},
 		{
 			"id": "rescue",
+			"name_ja": "霧鐘の村",
 			"goal_ja": "鐘守セナの救助を受け、村へ帰還する",
 			"mood_tags": ["village", "relief"],
 			"checks": [
