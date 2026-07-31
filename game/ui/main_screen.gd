@@ -31,6 +31,7 @@ var _settings_store: ExternalSettingsStore
 var _external_settings: Dictionary[String, Variant] = {}
 var _backend: LLMBackend
 var _machine: TurnMachine
+var _item_names: Dictionary[String, String] = {}
 var _log_entries: Array[Dictionary] = []
 var _streaming_text: String = ""
 var _streaming_is_narration: bool = false
@@ -56,6 +57,7 @@ var _skip_button: Button
 var _status_label: Label
 var _quest_label: Label
 var _scene_label: Label
+var _location_label: Label
 var _state_label: Label
 var _dice_label: Label
 var _hint_label: Label
@@ -63,6 +65,7 @@ var _external_indicator: ExternalConnectionIndicator
 var _settings_dialog: ExternalSettingsDialog
 var _fallback_dialog: ConfirmationDialog
 var _retry_external_button: Button
+var _suggestions_container: HFlowContainer
 var _last_submitted_input: String = ""
 var _fallback_waiting: bool = false
 
@@ -76,7 +79,7 @@ func _ready() -> void:
 		{
 			"speaker": tr("導入"),
 			"text": String(_scenario.data.get("intro_ja", "")),
-			"color": "#9fb7d8",
+			"kind": UIFormat.TextKind.NARRATION,
 		}
 	)
 	if _state.turn_count > 0:
@@ -84,7 +87,7 @@ func _ready() -> void:
 			{
 				"speaker": tr("システム"),
 				"text": tr("保存済みの第%dターンから再開しました。") % _state.turn_count,
-				"color": "#d5b878",
+				"kind": UIFormat.TextKind.SYSTEM,
 			}
 		)
 	_refresh_all()
@@ -105,42 +108,81 @@ func _build_interface() -> void:
 	add_child(margin)
 
 	var root_row: HBoxContainer = HBoxContainer.new()
-	root_row.add_theme_constant_override("separation", 18)
+	root_row.add_theme_constant_override("separation", 14)
 	margin.add_child(root_row)
 
-	var story_column: VBoxContainer = VBoxContainer.new()
-	story_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	story_column.size_flags_stretch_ratio = 2.2
-	story_column.add_theme_constant_override("separation", 10)
-	root_row.add_child(story_column)
+	var visual_panel: PanelContainer = PanelContainer.new()
+	visual_panel.custom_minimum_size = Vector2(270, 0)
+	visual_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	visual_panel.size_flags_stretch_ratio = 1.75
+	root_row.add_child(visual_panel)
+	var visual_margin: MarginContainer = MarginContainer.new()
+	visual_margin.add_theme_constant_override("margin_left", 18)
+	visual_margin.add_theme_constant_override("margin_top", 18)
+	visual_margin.add_theme_constant_override("margin_right", 18)
+	visual_margin.add_theme_constant_override("margin_bottom", 18)
+	visual_panel.add_child(visual_margin)
+	var visual_column: VBoxContainer = VBoxContainer.new()
+	visual_column.add_theme_constant_override("separation", 14)
+	visual_margin.add_child(visual_column)
 
 	_title_label = Label.new()
 	_title_label.text = tr("AI TRPG")
-	_title_label.add_theme_font_size_override("font_size", 28)
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_label.add_theme_font_size_override("font_size", 25)
 	_title_label.add_theme_color_override("font_color", Color("#e8d9ae"))
-	story_column.add_child(_title_label)
+	visual_column.add_child(_title_label)
 
-	var connection_row: HBoxContainer = HBoxContainer.new()
-	connection_row.add_theme_constant_override("separation", 10)
-	story_column.add_child(connection_row)
-	_external_indicator = ExternalConnectionIndicator.new()
-	_external_indicator.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	connection_row.add_child(_external_indicator)
-	var settings_button: Button = Button.new()
-	settings_button.text = tr("外部AI接続設定")
-	settings_button.pressed.connect(_on_settings_pressed)
-	connection_row.add_child(settings_button)
+	var visual_placeholder: PanelContainer = PanelContainer.new()
+	visual_placeholder.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	visual_column.add_child(visual_placeholder)
+	var visual_center: CenterContainer = CenterContainer.new()
+	visual_placeholder.add_child(visual_center)
+	var location_column: VBoxContainer = VBoxContainer.new()
+	location_column.add_theme_constant_override("separation", 10)
+	visual_center.add_child(location_column)
+	var visual_caption: Label = Label.new()
+	visual_caption.text = tr("現在地")
+	visual_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	visual_caption.add_theme_font_size_override("font_size", 14)
+	visual_caption.add_theme_color_override("font_color", Color("#90a5c2"))
+	location_column.add_child(visual_caption)
+	_location_label = Label.new()
+	_location_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_location_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_location_label.add_theme_font_size_override("font_size", 24)
+	_location_label.add_theme_color_override("font_color", Color("#e8d9ae"))
+	location_column.add_child(_location_label)
+	var placeholder_note: Label = Label.new()
+	placeholder_note.text = tr("シーンビジュアル準備中")
+	placeholder_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	placeholder_note.add_theme_color_override("font_color", Color("#667a93"))
+	location_column.add_child(placeholder_note)
 
 	_scene_label = Label.new()
+	_scene_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_scene_label.add_theme_font_size_override("font_size", 14)
 	_scene_label.add_theme_color_override("font_color", Color("#90a5c2"))
-	story_column.add_child(_scene_label)
+	visual_column.add_child(_scene_label)
+
+	var story_column: VBoxContainer = VBoxContainer.new()
+	story_column.custom_minimum_size = Vector2(400, 0)
+	story_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	story_column.size_flags_stretch_ratio = 2.25
+	story_column.add_theme_constant_override("separation", 10)
+	root_row.add_child(story_column)
+
+	var story_heading: Label = Label.new()
+	story_heading.text = tr("物語")
+	story_heading.add_theme_font_size_override("font_size", 20)
+	story_heading.add_theme_color_override("font_color", Color("#e8d9ae"))
+	story_column.add_child(story_heading)
 
 	_log_label = RichTextLabel.new()
 	_log_label.bbcode_enabled = true
 	_log_label.scroll_following = true
 	_log_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_log_label.custom_minimum_size = Vector2(560, 360)
+	_log_label.custom_minimum_size = Vector2(400, 360)
 	_log_label.add_theme_font_size_override("normal_font_size", 17)
 	story_column.add_child(_log_label)
 
@@ -148,6 +190,11 @@ func _build_interface() -> void:
 	_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_hint_label.add_theme_color_override("font_color", Color("#8fa7a0"))
 	story_column.add_child(_hint_label)
+
+	_suggestions_container = HFlowContainer.new()
+	_suggestions_container.add_theme_constant_override("h_separation", 8)
+	_suggestions_container.add_theme_constant_override("v_separation", 6)
+	story_column.add_child(_suggestions_container)
 
 	var input_row: HBoxContainer = HBoxContainer.new()
 	input_row.add_theme_constant_override("separation", 8)
@@ -170,49 +217,39 @@ func _build_interface() -> void:
 	_skip_button.pressed.connect(_on_skip_pressed)
 	input_row.add_child(_skip_button)
 
-	_resume_button = Button.new()
-	_resume_button.text = tr("前回の続きから描写する")
-	_resume_button.visible = false
-	_resume_button.pressed.connect(_on_resume_pressed)
-	story_column.add_child(_resume_button)
-
-	_retry_external_button = Button.new()
-	_retry_external_button.text = tr("保持した入力で外部AIへ再接続")
-	_retry_external_button.visible = false
-	_retry_external_button.pressed.connect(_on_retry_external_pressed)
-	story_column.add_child(_retry_external_button)
-
-	_new_game_button = Button.new()
-	_new_game_button.text = tr("新しく始める")
-	_new_game_button.visible = false
-	_new_game_button.pressed.connect(_on_new_game_pressed)
-	story_column.add_child(_new_game_button)
-
 	var side_panel: PanelContainer = PanelContainer.new()
-	side_panel.custom_minimum_size = Vector2(310, 0)
+	side_panel.custom_minimum_size = Vector2(220, 0)
+	side_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	side_panel.size_flags_stretch_ratio = 1.0
 	root_row.add_child(side_panel)
 
 	var side_margin: MarginContainer = MarginContainer.new()
-	side_margin.add_theme_constant_override("margin_left", 18)
-	side_margin.add_theme_constant_override("margin_top", 18)
-	side_margin.add_theme_constant_override("margin_right", 18)
-	side_margin.add_theme_constant_override("margin_bottom", 18)
+	side_margin.add_theme_constant_override("margin_left", 14)
+	side_margin.add_theme_constant_override("margin_top", 16)
+	side_margin.add_theme_constant_override("margin_right", 14)
+	side_margin.add_theme_constant_override("margin_bottom", 16)
 	side_panel.add_child(side_margin)
 
+	var side_scroll: ScrollContainer = ScrollContainer.new()
+	side_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	side_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	side_margin.add_child(side_scroll)
 	var side_column: VBoxContainer = VBoxContainer.new()
-	side_column.add_theme_constant_override("separation", 14)
-	side_margin.add_child(side_column)
+	side_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	side_column.add_theme_constant_override("separation", 12)
+	side_scroll.add_child(side_column)
 
 	_add_section_heading(side_column, tr("キャラクター"))
 	_status_label = Label.new()
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status_label.add_theme_font_size_override("font_size", 14)
 	side_column.add_child(_status_label)
 
 	_add_separator(side_column)
 	_add_section_heading(side_column, tr("現在のクエスト"))
 	_quest_label = Label.new()
 	_quest_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_quest_label.add_theme_font_size_override("font_size", 17)
+	_quest_label.add_theme_font_size_override("font_size", 15)
 	_quest_label.add_theme_color_override("font_color", Color("#e8d9ae"))
 	side_column.add_child(_quest_label)
 
@@ -221,9 +258,37 @@ func _build_interface() -> void:
 	_dice_label = Label.new()
 	_dice_label.text = tr("待機中")
 	_dice_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_dice_label.add_theme_font_size_override("font_size", 22)
+	_dice_label.add_theme_font_size_override("font_size", 20)
 	_dice_label.add_theme_color_override("font_color", Color("#d5b878"))
 	side_column.add_child(_dice_label)
+
+	_add_separator(side_column)
+	_add_section_heading(side_column, tr("メニュー"))
+	_external_indicator = ExternalConnectionIndicator.new()
+	_external_indicator.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	side_column.add_child(_external_indicator)
+	var settings_button: Button = Button.new()
+	settings_button.text = tr("外部AI接続設定")
+	settings_button.pressed.connect(_on_settings_pressed)
+	side_column.add_child(settings_button)
+
+	_resume_button = Button.new()
+	_resume_button.text = tr("前回の続きから描写する")
+	_resume_button.visible = false
+	_resume_button.pressed.connect(_on_resume_pressed)
+	side_column.add_child(_resume_button)
+
+	_retry_external_button = Button.new()
+	_retry_external_button.text = tr("保持した入力で外部AIへ再接続")
+	_retry_external_button.visible = false
+	_retry_external_button.pressed.connect(_on_retry_external_pressed)
+	side_column.add_child(_retry_external_button)
+
+	_new_game_button = Button.new()
+	_new_game_button.text = tr("新しく始める")
+	_new_game_button.visible = false
+	_new_game_button.pressed.connect(_on_new_game_pressed)
+	side_column.add_child(_new_game_button)
 
 	_dice_spin_timer = Timer.new()
 	_dice_spin_timer.wait_time = DICE_SPIN_INTERVAL_SECONDS
@@ -247,6 +312,7 @@ func _build_interface() -> void:
 	_settings_dialog = ExternalSettingsDialog.new(_settings_store)
 	_settings_dialog.settings_saved.connect(_on_external_settings_saved)
 	add_child(_settings_dialog)
+	_settings_dialog.hide()
 	_fallback_dialog = ConfirmationDialog.new()
 	_fallback_dialog.title = tr("外部AIへの接続に失敗しました")
 	_fallback_dialog.dialog_text = tr(
@@ -281,6 +347,16 @@ func _load_content() -> bool:
 		return false
 	_scenario = scenario_result.scenario
 	_title_label.text = String(_scenario.data.get("title", tr("AI TRPG")))
+	var item_result: ItemRegistry.LoadResult = ItemRegistry.load(_scenario)
+	if item_result.is_success():
+		for item_id: String in item_result.items:
+			_item_names[item_id] = String(item_result.items[item_id].get("name_ja", item_id))
+	else:
+		_append_log_entry(
+			tr("アイテム表示"),
+			tr("アイテム名を読み込めないため、所持品IDで表示します: %s")
+			% " / ".join(item_result.errors),
+		)
 	_save_manager = SaveManager.new()
 	var settings_result: ExternalSettingsStore.LoadResult = _settings_store.load_settings()
 	_external_settings = settings_result.settings
@@ -288,7 +364,6 @@ func _load_content() -> bool:
 		_append_log_entry(
 			tr("外部接続設定"),
 			tr("外部接続設定を読み込めないため、完全オフラインで起動しました。"),
-			"#d5b878",
 		)
 		_external_settings = _settings_store.default_settings()
 	_external_indicator.apply_settings(_external_settings)
@@ -335,18 +410,16 @@ func _load_saved_state() -> GameState:
 			)
 		return null
 	for warning: String in save_result.warnings:
-		_append_log_entry(tr("セーブ通知"), warning, "#d5b878")
+		_append_log_entry(tr("セーブ通知"), warning)
 	if save_result.used_fallback:
 		_append_log_entry(
 			tr("セーブ通知"),
 			tr("破損を検出したため、バックアップから復元しました。"),
-			"#d5b878",
 		)
 	if save_result.promoted_temporary:
 		_append_log_entry(
 			tr("セーブ通知"),
 			tr("未完了だった一時セーブを正式なセーブへ復元しました。"),
-			"#d5b878",
 		)
 	var state_result: GameState.LoadResult = GameState.deserialize(save_result.data)
 	if not state_result.is_success() or state_result.state == null:
@@ -432,7 +505,11 @@ func _submit_current_input() -> void:
 	_last_submitted_input = player_input
 	_input_line.clear()
 	_log_entries.append(
-		{"speaker": tr("あなた"), "text": player_input, "color": "#8fc6b2"}
+		{
+			"speaker": tr("あなた"),
+			"text": player_input,
+			"kind": UIFormat.TextKind.PLAYER,
+		}
 	)
 	_render_log()
 	_set_input_enabled(false)
@@ -477,12 +554,11 @@ func _on_new_game_pressed() -> void:
 	_append_log_entry(
 		tr("導入"),
 		String(_scenario.data.get("intro_ja", "")),
-		"#9fb7d8",
+		UIFormat.TextKind.NARRATION,
 	)
 	_append_log_entry(
 		tr("システム"),
 		tr("新しいゲームを開始しました。"),
-		"#d5b878",
 	)
 	_reset_dice_display()
 	_set_input_enabled(true)
@@ -504,7 +580,7 @@ func _on_state_changed(_previous: int, current: int) -> void:
 			{
 				"speaker": tr("システム"),
 				"text": _streaming_text,
-				"color": "#d5b878",
+				"kind": UIFormat.TextKind.SYSTEM,
 			}
 		)
 		_streaming_text = ""
@@ -530,7 +606,11 @@ func _on_narration_started(_resumed: bool) -> void:
 func _on_narration_finished(text: String) -> void:
 	if not text.is_empty():
 		_log_entries.append(
-			{"speaker": tr("GM"), "text": text, "color": "#c7b7df"}
+			{
+				"speaker": tr("GM"),
+				"text": text,
+				"kind": UIFormat.TextKind.NARRATION,
+			}
 		)
 	_streaming_text = ""
 	_streaming_is_narration = false
@@ -599,11 +679,15 @@ func _reveal_pending_dice_result() -> void:
 	]
 	_dice_label.add_theme_color_override("font_color", Color("#f2cf77"))
 	_log_entries.append(
-		{"speaker": tr("判定"), "text": reveal.evidence, "color": "#f2cf77"}
+		{"bbcode": reveal.evidence, "kind": UIFormat.TextKind.SYSTEM}
 	)
 	if not reveal.outcome.is_empty():
 		_log_entries.append(
-			{"speaker": tr("結果"), "text": reveal.outcome, "color": "#d5b878"}
+			{
+				"speaker": tr("結果"),
+				"text": reveal.outcome,
+				"kind": UIFormat.TextKind.SYSTEM,
+			}
 		)
 	_dice_label.scale = Vector2.ONE
 	_dice_tween = create_tween()
@@ -686,7 +770,7 @@ func _on_scenario_completed(xp: int, money: int) -> void:
 		{
 			"speaker": tr("クリア"),
 			"text": tr("報酬を獲得しました: XP +%d / 所持金 +%d") % [xp, money],
-			"color": "#8fd4a7",
+			"kind": UIFormat.TextKind.SYSTEM,
 		}
 	)
 	_render_log()
@@ -695,7 +779,11 @@ func _on_scenario_completed(xp: int, money: int) -> void:
 func _on_turn_failed(message: String) -> void:
 	_reset_dice_display()
 	_log_entries.append(
-		{"speaker": tr("エラー"), "text": message, "color": "#e58b8b"}
+		{
+			"speaker": tr("エラー"),
+			"text": message,
+			"kind": UIFormat.TextKind.SYSTEM,
+		}
 	)
 	_render_log()
 
@@ -719,7 +807,6 @@ func _on_external_settings_saved(settings: Dictionary) -> void:
 	_append_log_entry(
 		tr("外部接続設定"),
 		tr("AI接続設定を反映しました。"),
-		"#d5b878",
 	)
 
 
@@ -764,7 +851,6 @@ func _on_constrained_output_support_changed(supported: bool) -> void:
 	_append_log_entry(
 		tr("外部接続設定"),
 		tr("送信先は構造化出力に非対応です。分類が不安定になる可能性があります。"),
-		"#d5b878",
 	)
 
 
@@ -793,46 +879,47 @@ func _refresh_all() -> void:
 func _refresh_status_and_quest() -> void:
 	if _state == null:
 		return
-	var character: CharacterSheet = _state.character
-	_status_label.text = (
-		tr("%s\nHP %d / %d\nXP %d　所持金 %d\n\n能力値\n筋力 %+d　敏捷 %+d　体力 %+d\n知力 %+d　判断 %+d　魅力 %+d")
-		% [
-			character.name,
-			int(character.hp.get("current", 0)),
-			int(character.hp.get("max", 0)),
-			character.xp,
-			character.money,
-			int(character.abilities.get("STR", 0)),
-			int(character.abilities.get("DEX", 0)),
-			int(character.abilities.get("CON", 0)),
-			int(character.abilities.get("INT", 0)),
-			int(character.abilities.get("WIS", 0)),
-			int(character.abilities.get("CHA", 0)),
-		]
-	)
+	_status_label.text = UIFormat.format_status(_state)
 	var scene: Dictionary = _current_scene()
 	_scene_label.text = tr("第%dターン") % (_state.turn_count + 1)
+	_location_label.text = _scene_location_name(scene)
 	if bool(_state.flags.get("scenario_cleared", false)):
 		_quest_label.text = tr("シナリオクリア！\n霧鐘に夜明けが戻った")
 	else:
 		_quest_label.text = String(scene.get("goal_ja", tr("目標を確認できません。")))
 	_hint_label.text = _input_hint()
+	_refresh_suggestions(scene)
 
 
 func _render_log() -> void:
 	var output: String = ""
+	var known_terms: Array[String] = _known_terms()
 	for entry: Dictionary in _log_entries:
-		output += "[color=%s][b]%s[/b][/color]\n%s\n\n" % [
-			String(entry.get("color", "#ffffff")),
-			_escape_bbcode(String(entry.get("speaker", ""))),
-			_escape_bbcode(String(entry.get("text", ""))),
-		]
+		if entry.has("bbcode"):
+			output += String(entry["bbcode"]) + "\n\n"
+			continue
+		var kind: UIFormat.TextKind = int(
+			entry.get("kind", UIFormat.TextKind.SYSTEM)
+		)
+		output += UIFormat.format_log_entry(
+			kind,
+			String(entry.get("speaker", "")),
+			String(entry.get("text", "")),
+			known_terms,
+		) + "\n\n"
 	if not _streaming_text.is_empty():
 		var streaming_speaker: String = tr("GM") if _streaming_is_narration else tr("システム")
-		output += "[color=#c7b7df][b]%s[/b][/color]\n%s[color=#79899e]▌[/color]" % [
-			_escape_bbcode(streaming_speaker),
-			_escape_bbcode(_streaming_text),
-		]
+		var streaming_kind: UIFormat.TextKind = (
+			UIFormat.TextKind.NARRATION
+			if _streaming_is_narration
+			else UIFormat.TextKind.SYSTEM
+		)
+		output += UIFormat.format_log_entry(
+			streaming_kind,
+			streaming_speaker,
+			_streaming_text,
+			known_terms,
+		) + "[color=#79899e]▌[/color]"
 	_log_label.text = output
 	call_deferred("_scroll_log_to_bottom")
 
@@ -849,6 +936,11 @@ func _set_input_enabled(enabled: bool) -> void:
 	_input_line.editable = enabled and not cleared
 	_submit_button.disabled = not enabled or cleared
 	_new_game_button.disabled = not enabled
+	if _suggestions_container != null:
+		for child: Node in _suggestions_container.get_children():
+			if child is Button:
+				var suggestion_button: Button = child
+				suggestion_button.disabled = not enabled or cleared
 	if _input_line.editable:
 		_input_line.grab_focus()
 
@@ -867,6 +959,93 @@ func _current_scene() -> Dictionary:
 		if String(scene.get("id", "")) == _state.scene_id:
 			return scene
 	return {}
+
+
+func _scene_location_name(scene: Dictionary) -> String:
+	var configured_name: String = String(scene.get("name_ja", ""))
+	if not configured_name.is_empty():
+		return configured_name
+	var scene_id: String = _state.scene_id if _state != null else ""
+	match scene_id:
+		"fog_gate":
+			return tr("霧門")
+		"sunken_archive":
+			return tr("水没書庫")
+		"observatory":
+			return tr("星見鏡の観測所")
+		"dawn_sanctum":
+			return tr("夜明けの聖堂")
+		"rescue":
+			return tr("霧鐘の村")
+		_:
+			return scene_id
+
+
+func _known_terms() -> Array[String]:
+	if _state == null:
+		return []
+	var terms: Array[String] = []
+	var scene: Dictionary = _current_scene()
+	var location_name: String = _scene_location_name(scene)
+	if not location_name.is_empty():
+		terms.append(location_name)
+	var npcs_value: Variant = scene.get("npcs", [])
+	if typeof(npcs_value) == TYPE_ARRAY:
+		var npcs: Array = npcs_value
+		for npc_value: Variant in npcs:
+			if typeof(npc_value) != TYPE_DICTIONARY:
+				continue
+			var npc: Dictionary = npc_value
+			var npc_name: String = String(npc.get("name", ""))
+			if not npc_name.is_empty():
+				terms.append(npc_name)
+	for inventory_entry: Dictionary in _state.character.inventory:
+		var item_id: String = String(inventory_entry.get("item_id", ""))
+		var item_name: String = _item_names.get(item_id, "")
+		if not item_name.is_empty():
+			terms.append(item_name)
+	return terms
+
+
+func _refresh_suggestions(scene: Dictionary) -> void:
+	for child: Node in _suggestions_container.get_children():
+		_suggestions_container.remove_child(child)
+		child.queue_free()
+	var suggestions: Array[String] = []
+	var checks_value: Variant = scene.get("checks", [])
+	if typeof(checks_value) == TYPE_ARRAY:
+		var checks: Array = checks_value
+		for check_value: Variant in checks:
+			if typeof(check_value) != TYPE_DICTIONARY:
+				continue
+			var check: Dictionary = check_value
+			var trigger_hint: String = String(check.get("trigger_hint", ""))
+			if not trigger_hint.is_empty() and not suggestions.has(trigger_hint):
+				suggestions.append(trigger_hint)
+	var npcs_value: Variant = scene.get("npcs", [])
+	if typeof(npcs_value) == TYPE_ARRAY:
+		var npcs: Array = npcs_value
+		for npc_value: Variant in npcs:
+			if typeof(npc_value) != TYPE_DICTIONARY:
+				continue
+			var npc: Dictionary = npc_value
+			var npc_name: String = String(npc.get("name", ""))
+			if not npc_name.is_empty():
+				suggestions.append(tr("%sに話しかける") % npc_name)
+	for suggestion: String in suggestions:
+		var button: Button = Button.new()
+		button.text = suggestion
+		button.disabled = _busy
+		button.pressed.connect(_on_suggestion_pressed.bind(suggestion))
+		_suggestions_container.add_child(button)
+
+
+func _on_suggestion_pressed(suggestion: String) -> void:
+	if _busy:
+		return
+	_input_line.text = suggestion
+	_input_line.caret_column = suggestion.length()
+	_input_line.grab_focus()
 
 
 func _current_goal() -> String:
@@ -899,31 +1078,14 @@ func _judgment_evidence(result: Judgment.Result) -> String:
 				roll_mode = tr("有利")
 			Types.RollMode.DISADVANTAGE:
 				roll_mode = tr("不利")
-	var applied_skill: String = tr("なし（能力値のみ採用）")
-	if not result.applied_tag.is_empty():
-		applied_skill = tr("%s（+%d、完全一致のため採用）") % [
-			result.applied_tag,
-			result.skill_bonus,
-		]
-	var rejected: String = tr("なし")
-	if not result.rejected_tags.is_empty():
-		rejected = tr("%s（不採用: 所持タグとの完全一致なし、またはボーナス重複）") % str(
-			result.rejected_tags
-		)
-	return (
-		tr("能力値: %s %+d\nスキル: %s\n不採用候補: %s\n状況修正: %+d / ロール: %s\n出目: %s / 採用: %s / 合計: %d\n結果: %s")
-		% [
-			ability_id,
-			result.ability_mod,
-			applied_skill,
-			rejected,
-			result.situation_mod,
-			roll_mode,
-			str(result.dice),
-			str(result.kept),
-			result.total,
-			_tier_label(result.tier),
-		]
+	var detail: String = tr("能力値: %s %+d / ロール: %s / 全出目: %s") % [
+		ability_id,
+		result.ability_mod,
+		roll_mode,
+		str(result.dice),
+	]
+	return UIFormat.format_judgment_card(result) + "\n[color=#9aa8b8]%s[/color]" % (
+		UIFormat.escape_bbcode(detail)
 	)
 
 
@@ -1081,18 +1243,18 @@ func _slot_has_save_files() -> bool:
 	return false
 
 
-func _escape_bbcode(text: String) -> String:
-	return text.replace("[", "[lb]")
-
-
-func _append_log_entry(speaker: String, text: String, color: String) -> void:
+func _append_log_entry(
+	speaker: String,
+	text: String,
+	kind: UIFormat.TextKind = UIFormat.TextKind.SYSTEM,
+) -> void:
 	_log_entries.append(
-		{"speaker": speaker, "text": text, "color": color}
+		{"speaker": speaker, "text": text, "kind": kind}
 	)
 	_render_log()
 
 
 func _show_startup_error(message: String) -> void:
 	_reset_dice_display()
-	_append_log_entry(tr("起動エラー"), message, "#e58b8b")
+	_append_log_entry(tr("起動エラー"), message)
 	_set_input_enabled(false)
